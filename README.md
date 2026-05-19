@@ -1,0 +1,119 @@
+# CMD-AUDIO
+
+Music-reactive terminal "hacker" visualization with optional setup/control popup UI.
+
+The project runs from a single script:
+- `music_sync_hacker_effect.py`
+
+## Features
+
+- Audio-synced animated terminal scenes
+- Multiple themes and presets
+- Scene packs and adaptive scene sync
+- Optional Tkinter setup/control window
+- Frame recording and replay support
+- Optional plugin hook support
+- Optional diagnostics output
+
+## Requirements
+
+- Python 3.9+
+- `ffmpeg` for non-WAV audio input conversion and some capture flows
+- Optional: `ffplay` or `aplay` for audio playback
+- Optional: `tkinter` for setup/control popup UI
+
+No third-party Python packages are required by default.
+
+## Quick Start
+
+Run with an audio file:
+
+```bash
+python3 music_sync_hacker_effect.py /path/to/song.mp3
+```
+
+Run with a preset and diagnostics:
+
+```bash
+python3 music_sync_hacker_effect.py /path/to/song.mp3 --preset chaos --diagnostics
+```
+
+Run using microphone/system capture:
+
+```bash
+python3 music_sync_hacker_effect.py --source mic --capture-seconds 30
+python3 music_sync_hacker_effect.py --source system --capture-seconds 30
+```
+
+Open setup popup before run:
+
+```bash
+python3 music_sync_hacker_effect.py --setup-ui
+```
+
+## Common Options
+
+```text
+--config PATH                 Load JSON config
+--save-config PATH            Save current config and exit
+--playlist PATH               Text file, one audio path per line
+--source {file,mic,system}    Input source
+--fps INT                     Frames per second
+--sensitivity FLOAT           Visual intensity multiplier
+--speed-min FLOAT             Minimum visual speed
+--speed-max FLOAT             Maximum visual speed
+--theme {matrix,red-alert,ice,amber}
+--preset NAME                 Apply visual preset
+--scene-sync {adaptive,bpm,hybrid}
+--quality-mode {off,auto}
+--ui-style {full,minimal}
+--record-file PATH            Save rendered frames
+--record-mode FORMAT          jsonl/txt variants (including .gz)
+--replay-file PATH            Replay previously recorded frames
+--plugin PATH                 Python plugin file with hooks
+--video-hook CMD              Run shell command after recording
+--diagnostics                 Print startup diagnostics
+--setup-ui                    Open setup popup before running
+--ui / --no-ui                Enable/disable control popup window
+```
+
+Get complete CLI help:
+
+```bash
+python3 music_sync_hacker_effect.py --help
+```
+
+## Live Controls
+
+While running in terminal:
+
+- `q`: quit
+- `p`: pause
+- `+` / `-`: increase/decrease sensitivity
+- `]` / `[`: increase/decrease max speed
+- `t`: cycle theme
+- `b`: toggle banner
+- `e`: edit banner text
+- `c`: cycle banner alignment
+- `v`: cycle banner animation
+- `x`: cycle banner size
+- `m`: switch terminal profile
+- `r`: randomize scene
+- `z`: reset music/session
+- `0`: reset sensitivity/speed defaults
+- `n` / `u`: next/previous track
+- `1` / `2` / `3`: toggle mission timeline / defender AI / audio FX
+- `a`: toggle alert tones
+- `y`: scene sync mode
+- `k`: quality mode
+- `j`: UI style
+- `g`: Unicode bars
+- `h`: lock scene
+- `o`: operation mode
+- `l`: target lock
+
+## Notes
+
+- If your input is not WAV, the script uses `ffmpeg` to convert it.
+- If `tkinter` is unavailable, UI flags are ignored with a warning and terminal mode continues.
+- For troubleshooting startup environment and tools, run with `--diagnostics`.
