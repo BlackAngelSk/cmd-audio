@@ -19,10 +19,29 @@ The project runs from a single script:
 
 - Python 3.9+
 - `ffmpeg` for non-WAV audio input conversion and some capture flows
+- Optional: `yt-dlp` for YouTube audio downloads
 - Optional: `ffplay` or `aplay` for audio playback
 - Optional: `tkinter` for setup/control popup UI
 
-No third-party Python packages are required by default.
+No third-party Python packages are required by default, but YouTube support requires `yt-dlp`.
+
+## Installation
+
+### YouTube Support (Optional - Not Required)
+
+YouTube downloading is **completely optional**. The script works perfectly fine without it.
+
+If you want to try YouTube support:
+- **Debian/Ubuntu:** `sudo apt-get install yt-dlp`
+- **Arch/CachyOS:** May have compatibility issues with Python 3.14+
+- **macOS:** `brew install yt-dlp`
+
+**If installation fails or you skip it:** Use these alternatives:
+- Local audio files: `python3 music_sync_hacker_effect.py /path/to/song.mp3`
+- Microphone input: `python3 music_sync_hacker_effect.py --source mic --capture-seconds 60`
+- System audio: `python3 music_sync_hacker_effect.py --source system --capture-seconds 60`
+
+The `--youtube` option will gracefully inform you if yt-dlp is not installed.
 
 ## Quick Start
 
@@ -30,6 +49,12 @@ Run with an audio file:
 
 ```bash
 python3 music_sync_hacker_effect.py /path/to/song.mp3
+```
+
+Run with a YouTube video (downloads audio):
+
+```bash
+python3 music_sync_hacker_effect.py --youtube "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 Run with a preset and diagnostics:
@@ -56,6 +81,7 @@ python3 music_sync_hacker_effect.py --setup-ui
 ```text
 --config PATH                 Load JSON config
 --save-config PATH            Save current config and exit
+--youtube URL                 YouTube URL to download and play (requires yt-dlp)
 --playlist PATH               Text file, one audio path per line
 --source {file,mic,system}    Input source
 --fps INT                     Frames per second

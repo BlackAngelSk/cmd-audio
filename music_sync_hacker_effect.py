@@ -755,6 +755,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--save-config", default="", help="Write current settings to JSON and exit")
     p.add_argument("audio", nargs="*", help="Audio path (supports unquoted spaces)")
     p.add_argument("--source", choices=["file", "mic", "system"], default="file")
+    p.add_argument("--youtube", default="", help="YouTube URL to download and play")
     p.add_argument("--playlist", default="", help="Optional text playlist (one path per line)")
     p.add_argument("--capture-seconds", type=int, default=30, help="Seconds to capture for mic/system")
     p.add_argument("--fps", type=int, default=30, help="Frames per second")
@@ -850,6 +851,7 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
     keep_converted_var = tk.BooleanVar(value=args.keep_converted)
     record_file_var = tk.StringVar(value=args.record_file)
     record_mode_var = tk.StringVar(value=args.record_mode)
+    youtube_var = tk.StringVar(value=args.youtube)
     playlist_var = tk.StringVar(value=args.playlist)
     scene_pack_var = tk.StringVar(value=args.scene_pack)
     scene_pack_file_var = tk.StringVar(value=args.scene_pack_file)
@@ -870,110 +872,115 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
     source_combo = ttk.Combobox(frm, textvariable=source_var, values=["file", "mic", "system"], state="readonly")
     source_combo.grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Audio File").grid(row=1, column=0, sticky="w")
+    ttk.Label(frm, text="YouTube URL").grid(row=1, column=0, sticky="w")
+    youtube_entry = ttk.Entry(frm, textvariable=youtube_var)
+    youtube_entry.grid(row=1, column=1, sticky="ew", padx=(8, 0))
+
+    ttk.Label(frm, text="Audio File").grid(row=2, column=0, sticky="w")
     audio_entry = ttk.Entry(frm, textvariable=audio_var)
-    audio_entry.grid(row=1, column=1, sticky="ew", padx=(8, 0))
+    audio_entry.grid(row=2, column=1, sticky="ew", padx=(8, 0))
     browse_btn = ttk.Button(
         frm,
         text="Browse...",
         command=lambda: audio_var.set(filedialog.askopenfilename() or audio_var.get()),
     )
-    browse_btn.grid(row=1, column=2, sticky="w", padx=(8, 0))
+    browse_btn.grid(row=2, column=2, sticky="w", padx=(8, 0))
 
-    ttk.Label(frm, text="Capture Seconds").grid(row=2, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=capture_var).grid(row=2, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Capture Seconds").grid(row=3, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=capture_var).grid(row=3, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="FPS").grid(row=3, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=fps_var).grid(row=3, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="FPS").grid(row=4, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=fps_var).grid(row=4, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Checkbutton(frm, text="Play Audio", variable=play_var).grid(row=4, column=0, sticky="w", pady=(4, 0))
+    ttk.Checkbutton(frm, text="Play Audio", variable=play_var).grid(row=5, column=0, sticky="w", pady=(4, 0))
 
-    ttk.Label(frm, text="Seed (optional)").grid(row=5, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=seed_var).grid(row=5, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Seed (optional)").grid(row=6, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=seed_var).grid(row=6, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Sensitivity").grid(row=6, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=sensitivity_var).grid(row=6, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Sensitivity").grid(row=7, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=sensitivity_var).grid(row=7, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Speed Min").grid(row=7, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=speed_min_var).grid(row=7, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Speed Min").grid(row=8, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=speed_min_var).grid(row=8, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Speed Max").grid(row=8, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=speed_max_var).grid(row=8, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Speed Max").grid(row=9, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=speed_max_var).grid(row=9, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Switch Min (s)").grid(row=9, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=switch_min_var).grid(row=9, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Switch Min (s)").grid(row=10, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=switch_min_var).grid(row=10, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Switch Max (s)").grid(row=10, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=switch_max_var).grid(row=10, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Switch Max (s)").grid(row=11, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=switch_max_var).grid(row=11, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Theme").grid(row=11, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=theme_var, values=list(THEMES.keys()), state="readonly").grid(row=11, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Theme").grid(row=12, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=theme_var, values=list(THEMES.keys()), state="readonly").grid(row=12, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Preset").grid(row=12, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=preset_var, values=[""] + list(PRESETS.keys()), state="readonly").grid(row=12, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Preset").grid(row=13, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=preset_var, values=[""] + list(PRESETS.keys()), state="readonly").grid(row=13, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Scene Sync").grid(row=13, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=scene_sync_var, values=["adaptive", "bpm", "hybrid"], state="readonly").grid(row=13, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Scene Sync").grid(row=14, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=scene_sync_var, values=["adaptive", "bpm", "hybrid"], state="readonly").grid(row=14, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Quality").grid(row=14, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=quality_var, values=["auto", "off"], state="readonly").grid(row=14, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Quality").grid(row=15, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=quality_var, values=["auto", "off"], state="readonly").grid(row=15, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Banner Text").grid(row=15, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=banner_var).grid(row=15, column=1, sticky="ew", padx=(8, 0))
-    ttk.Label(frm, text="Banner Align").grid(row=16, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=banner_align_var, values=["left", "center", "right"], state="readonly").grid(row=16, column=1, sticky="ew", padx=(8, 0))
-    ttk.Label(frm, text="Banner Animation").grid(row=17, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=banner_anim_var, values=["off", "scroll", "pulse"], state="readonly").grid(row=17, column=1, sticky="ew", padx=(8, 0))
-    ttk.Label(frm, text="Banner Size").grid(row=18, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=banner_size_var, values=["normal", "large"], state="readonly").grid(row=18, column=1, sticky="ew", padx=(8, 0))
-    ttk.Checkbutton(frm, text="Show Banner Row", variable=show_banner_var).grid(row=19, column=0, sticky="w", pady=(4, 0))
+    ttk.Label(frm, text="Banner Text").grid(row=16, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=banner_var).grid(row=16, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Banner Align").grid(row=17, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=banner_align_var, values=["left", "center", "right"], state="readonly").grid(row=17, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Banner Animation").grid(row=18, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=banner_anim_var, values=["off", "scroll", "pulse"], state="readonly").grid(row=18, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Banner Size").grid(row=19, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=banner_size_var, values=["normal", "large"], state="readonly").grid(row=19, column=1, sticky="ew", padx=(8, 0))
+    ttk.Checkbutton(frm, text="Show Banner Row", variable=show_banner_var).grid(row=20, column=0, sticky="w", pady=(4, 0))
 
-    ttk.Checkbutton(frm, text="Keep Converted WAV", variable=keep_converted_var).grid(row=20, column=0, sticky="w", pady=(4, 0))
-    ttk.Checkbutton(frm, text="Print Diagnostics", variable=diagnostics_var).grid(row=21, column=0, sticky="w", pady=(4, 0))
-    ttk.Checkbutton(frm, text="Alert Tones", variable=alert_tones_var).grid(row=20, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
-    ttk.Checkbutton(frm, text="Mission Timeline", variable=mission_timeline_var).grid(row=21, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
-    ttk.Checkbutton(frm, text="Defender AI", variable=defender_ai_var).grid(row=20, column=2, sticky="w", padx=(8, 0), pady=(4, 0))
-    ttk.Checkbutton(frm, text="Audio FX", variable=audio_fx_var).grid(row=21, column=2, sticky="w", padx=(8, 0), pady=(4, 0))
+    ttk.Checkbutton(frm, text="Keep Converted WAV", variable=keep_converted_var).grid(row=21, column=0, sticky="w", pady=(4, 0))
+    ttk.Checkbutton(frm, text="Print Diagnostics", variable=diagnostics_var).grid(row=22, column=0, sticky="w", pady=(4, 0))
+    ttk.Checkbutton(frm, text="Alert Tones", variable=alert_tones_var).grid(row=21, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+    ttk.Checkbutton(frm, text="Mission Timeline", variable=mission_timeline_var).grid(row=22, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+    ttk.Checkbutton(frm, text="Defender AI", variable=defender_ai_var).grid(row=21, column=2, sticky="w", padx=(8, 0), pady=(4, 0))
+    ttk.Checkbutton(frm, text="Audio FX", variable=audio_fx_var).grid(row=22, column=2, sticky="w", padx=(8, 0), pady=(4, 0))
 
-    ttk.Label(frm, text="Record File").grid(row=22, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=record_file_var).grid(row=22, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Record File").grid(row=23, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=record_file_var).grid(row=23, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Record Mode").grid(row=23, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=record_mode_var, values=["jsonl", "txt", "txt-clean", "jsonl.gz", "txt.gz", "txt-clean.gz"], state="readonly").grid(row=23, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Record Mode").grid(row=24, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=record_mode_var, values=["jsonl", "txt", "txt-clean", "jsonl.gz", "txt.gz", "txt-clean.gz"], state="readonly").grid(row=24, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Playlist File").grid(row=24, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=playlist_var).grid(row=24, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Playlist File").grid(row=25, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=playlist_var).grid(row=25, column=1, sticky="ew", padx=(8, 0))
     ttk.Button(
         frm,
         text="Browse...",
         command=lambda: playlist_var.set(filedialog.askopenfilename() or playlist_var.get()),
-    ).grid(row=24, column=2, sticky="w", padx=(8, 0))
+    ).grid(row=25, column=2, sticky="w", padx=(8, 0))
 
-    ttk.Label(frm, text="Scene Pack").grid(row=25, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=scene_pack_var, values=[""] + sorted(list(SCENE_PACKS.keys())), state="readonly").grid(row=25, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Scene Pack").grid(row=26, column=0, sticky="w")
+    ttk.Combobox(frm, textvariable=scene_pack_var, values=[""] + sorted(list(SCENE_PACKS.keys())), state="readonly").grid(row=26, column=1, sticky="ew", padx=(8, 0))
 
-    ttk.Label(frm, text="Scene Pack File").grid(row=26, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=scene_pack_file_var).grid(row=26, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Scene Pack File").grid(row=27, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=scene_pack_file_var).grid(row=27, column=1, sticky="ew", padx=(8, 0))
     ttk.Button(
         frm,
         text="Browse...",
         command=lambda: scene_pack_file_var.set(filedialog.askopenfilename() or scene_pack_file_var.get()),
-    ).grid(row=26, column=2, sticky="w", padx=(8, 0))
+    ).grid(row=27, column=2, sticky="w", padx=(8, 0))
 
-    ttk.Label(frm, text="Plugin File").grid(row=27, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=plugin_var).grid(row=27, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Plugin File").grid(row=28, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=plugin_var).grid(row=28, column=1, sticky="ew", padx=(8, 0))
     ttk.Button(
         frm,
         text="Browse...",
         command=lambda: plugin_var.set(filedialog.askopenfilename() or plugin_var.get()),
-    ).grid(row=27, column=2, sticky="w", padx=(8, 0))
+    ).grid(row=28, column=2, sticky="w", padx=(8, 0))
 
-    ttk.Label(frm, text="Video Hook").grid(row=28, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=video_hook_var).grid(row=28, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(frm, text="Video Hook").grid(row=29, column=0, sticky="w")
+    ttk.Entry(frm, textvariable=video_hook_var).grid(row=29, column=1, sticky="ew", padx=(8, 0))
 
     def update_source_state(*_: object) -> None:
         in_file_mode = source_var.get() == "file"
         state = "normal" if in_file_mode else "disabled"
+        youtube_entry.configure(state=state)
         audio_entry.configure(state=state)
         browse_btn.configure(state=state)
 
@@ -1001,13 +1008,15 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
             if source not in ("file", "mic", "system"):
                 raise ValueError("Source must be file, mic, or system")
 
+            youtube_url = youtube_var.get().strip()
             audio_path = audio_var.get().strip()
             playlist_path = playlist_var.get().strip()
-            if source == "file" and not audio_path and not playlist_path:
-                messagebox.showerror("Missing Audio", "Audio file path or playlist file is required when source is file.")
+            if source == "file" and not youtube_url and not audio_path and not playlist_path:
+                messagebox.showerror("Missing Audio", "YouTube URL, audio file path, or playlist file is required when source is file.")
                 return
 
             args.source = source
+            args.youtube = youtube_url
             args.audio = [audio_path] if audio_path else []
             args.capture_seconds = parse_int_field(capture_var.get(), "Capture Seconds", 1, 3600)
             args.fps = parse_int_field(fps_var.get(), "FPS", 1, 240)
@@ -1738,10 +1747,84 @@ def capture_to_wav(source: str, seconds: int) -> str:
     raise RuntimeError("Could not capture audio source. Install ffmpeg or arecord.")
 
 
+def is_youtube_url(url: str) -> bool:
+    """Check if a string is a YouTube URL."""
+    return "youtube.com" in url or "youtu.be" in url
+
+
+def download_youtube_audio(url: str) -> str:
+    """Download audio from a YouTube URL and return path to WAV file."""
+    try:
+        import yt_dlp  # type: ignore[import-not-found]
+    except ImportError:
+        raise RuntimeError(
+            "YouTube support requires yt-dlp. Install it with: pip install yt-dlp"
+        )
+
+    tmp = tempfile.NamedTemporaryFile(prefix="hacker_youtube_", suffix=".wav", delete=False)
+    tmp_wav = tmp.name
+    tmp.close()
+
+    # First, download audio as temporary mp3
+    tmp_mp3 = tempfile.NamedTemporaryFile(prefix="hacker_youtube_", suffix=".mp3", delete=False)
+    tmp_mp3_path = tmp_mp3.name
+    tmp_mp3.close()
+
+    try:
+        # Download using yt-dlp
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+            "outtmpl": tmp_mp3_path.replace(".mp3", ""),
+            "quiet": True,
+            "no_warnings": True,
+        }
+
+        print(f"Downloading audio from: {url}", file=sys.stderr)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
+            ydl.download([url])
+
+        # Convert MP3 to WAV using ffmpeg
+        cmd = ["ffmpeg", "-y", "-i", tmp_mp3_path, "-ac", "1", "-ar", "44100", tmp_wav]
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except FileNotFoundError as exc:
+            raise RuntimeError("ffmpeg required for YouTube audio conversion") from exc
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError("ffmpeg failed to convert YouTube audio") from exc
+
+        print(f"YouTube audio saved to: {tmp_wav}", file=sys.stderr)
+        return tmp_wav
+
+    finally:
+        # Clean up temporary MP3
+        try:
+            os.unlink(tmp_mp3_path)
+        except OSError:
+            pass
+
+
 def prepare_audio_input(args: argparse.Namespace, audio_path: str) -> Tuple[str, str, bool]:
     if args.source == "file":
         if not audio_path:
             raise RuntimeError("Audio file path is required in file mode")
+        
+        # Check if it's a YouTube URL
+        if is_youtube_url(audio_path):
+            try:
+                wav_input = download_youtube_audio(audio_path)
+                return wav_input, wav_input, True
+            except RuntimeError as e:
+                print(f"YouTube support unavailable: {e}", file=sys.stderr)
+                print("Please provide a local audio file instead.", file=sys.stderr)
+                raise
+        
         if not os.path.exists(audio_path):
             raise RuntimeError(f"Audio file not found: {audio_path}")
         wav_input, cleanup = ensure_wav_input(audio_path, keep_converted=args.keep_converted)
@@ -1750,6 +1833,7 @@ def prepare_audio_input(args: argparse.Namespace, audio_path: str) -> Tuple[str,
     captured = capture_to_wav(args.source, args.capture_seconds)
     print(f"Captured {args.source} audio to: {captured}", file=sys.stderr)
     return captured, captured, True
+
 
 
 def decode_pcm_to_mono_samples(data: bytes, sample_width: int, channels: int) -> List[int]:
@@ -3234,7 +3318,7 @@ def main() -> int:
     set_bar_mode(args.unicode_bars)
     live_state: Optional[LiveControlState] = None
     live_ui: Optional[LiveUIHandle] = None
-    initial_music_file = " ".join(args.audio).strip() or "(demo mode)"
+    initial_music_file = args.youtube or " ".join(args.audio).strip() or "(demo mode)"
 
     def close_live_ui() -> None:
         if live_ui is not None:
@@ -3329,6 +3413,11 @@ def main() -> int:
         return 0
 
     audio_path = " ".join(args.audio).strip()
+    
+    # Handle YouTube URL if provided
+    if args.youtube:
+        audio_path = args.youtube
+
     playlist_tracks: List[str] = []
     playlist_index = -1
 
