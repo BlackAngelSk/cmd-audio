@@ -102,7 +102,7 @@ SYSLOG_MESSAGES = [
     "polkitd[1000]: Registered Authentication Agent",
     "NetworkManager[456]: <info> device (eth0): state change: activated",
     "systemd-resolved[{pid}]: Server returned error NXDOMAIN",
-    "audit[{pid}]: AVC avc: denied { read } for pid={pid} comm=\"ssh\"",
+    "audit[{pid}]: AVC avc: denied read for pid={pid} comm=\"ssh\"",
 ]
 
 SYSLOG_SEVERITIES = ["EMERG", "ALERT", "CRIT", "ERR", "WARN", "NOTICE", "INFO", "DEBUG"]
@@ -177,6 +177,160 @@ REGISTER_NAMES = [
     "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
     "RIP", "EFLAGS", "CS", "DS", "SS", "ES", "FS", "GS",
 ]
+
+# ---------------------------------------------------------------------------
+# New visual module word lists (buffer-overflow, geo-trace, etc.)
+# ---------------------------------------------------------------------------
+
+# Buffer overflow
+EXPLOIT_TYPES = ["remote-bof", "local-bof", "heap-overflow", "stack-overflow", "SEH-overwrite", "use-after-free"]
+NOP_SLED_CHARS = ["\x90", "NOP", "INT", "XOR", "MOV"]
+SHELLCODE_PAYLOADS = [
+    "bind_shell_tcp:4444",
+    "reverse_shell:192.168.1.1:31337",
+    "meterpreter_reverse_tcp",
+    "exec_cmd:/bin/sh -i",
+    "add_user:backdoor:pass123",
+    "download_exec:http://evil/payload.exe",
+]
+
+# Geo trace
+CITIES = [
+    ("Moscow", 55.7558, 37.6173), ("London", 51.5074, -0.1278),
+    ("New York", 40.7128, -74.0060), ("Tokyo", 35.6762, 139.6503),
+    ("Beijing", 39.9042, 116.4074), ("Sydney", -33.8688, 151.2093),
+    ("Berlin", 52.5200, 13.4050), ("Paris", 48.8566, 2.3522),
+    ("Dubai", 25.2048, 55.2708), ("Singapore", 1.3521, 103.8198),
+    ("Mumbai", 19.0760, 72.8777), ("Toronto", 43.6532, -79.3832),
+    ("Sao Paulo", -23.5505, -46.6333), ("Cairo", 30.0444, 31.2357),
+    ("Seoul", 37.5665, 126.9780), ("Amsterdam", 52.3676, 4.9041),
+    ("Stockholm", 59.3293, 18.0686), ("Helsinki", 60.1699, 24.9384),
+    ("Zurich", 47.3769, 8.5417), ("Warsaw", 52.2297, 21.0122),
+    ("Prague", 50.0755, 14.4378), ("Bratislava", 48.1486, 17.1077),
+]
+ISP_NAMES = ["Rostelecom", "Deutsche Telekom", "Orange", "BT Group", "China Telecom",
+             "NTT Communications", "Comcast", "Verizon", "Level3", "Cogent",
+             "GTT", "Telia Carrier", "Tata Communications", "CenturyLink",
+             "Singtel", "Telstra", "KDDI", "LGU+", "SK Broadband", "O2"]
+AS_NUMBERS = ["AS15169", "AS8075", "AS32934", "AS16509", "AS13335",
+              "AS24940", "AS36351", "AS20940", "AS45102", "AS54113",
+              "AS16276", "AS14061", "AS9370", "AS2510", "AS47232",
+              "AS4134", "AS4808", "AS4837", "AS9929", "AS10010",
+              "AS20473", "AS16265", "AS3223", "AS1239", "AS174",
+              "AS6453", "AS6762", "AS1299", "AS2914", "AS3257",
+              "AS3356", "AS5511", "AS6830", "AS6939", "AS7018",
+              "AS7132", "AS7922", "AS20001", "AS20115", "AS30036",
+              "AS40065", "AS50001", "AS60068", "AS701", "AS702",
+              "AS703", "AS704", "AS705", "AS706", "AS707"]
+
+# VHS glitch
+VHS_TIMESTAMPS = ["00:00:00:01", "00:12:47:15", "01:23:45:22", "02:34:56:07",
+                  "03:45:12:30", "04:56:23:18", "05:14:37:02", "06:01:59:59"]
+VHS_TRACKING_MODES = ["SP", "LP", "SLP", "EP"]
+VHS_TAPE_LABELS = ["MAXELL HGX Gold", "TDK SA-X", "Fuji Pro", "Sony V", "JVC Super",
+                   "BASF Chrome", "Panasonic Premium", "Memorex HS"]
+
+# Radar sweep
+RADAR_BLIP_TYPES = ["HOSTILE", "UNKNOWN", "FRIENDLY", "CIVILIAN", "SUSPECT", "DECOY"]
+
+# Particle systems
+PARTICLE_CHARS = ["*", ".", ":", "+", "#", "@", "%", "~", "o", "O", "0", "✦", "✧", "⚡", "★"]
+
+# Payload builder
+PAYLOAD_TYPES = ["windows/meterpreter/reverse_tcp", "linux/x64/shell_reverse_tcp",
+                 "osx/x64/exec", "android/meterpreter/reverse_tcp",
+                 "python/meterpreter/reverse_tcp", "php/reverse_php",
+                 "java/jsp_shell_reverse_tcp", "windows/x64/exec"]
+PAYLOAD_ENCODERS = ["x86/shikata_ga_nai", "x64/zutto_dekiru", "generic/none",
+                    "x86/fnstenv_mov", "x86/countdown", "x86/call4_dword_xor"]
+PAYLOAD_STAGES = ["stageless", "staged", "stage1", "stage2", "final"]
+
+# SQL injection
+SQLI_TECHNIQUES = ["UNION SELECT", "ERROR-BASED", "TIME-BASED", "BOOLEAN-BASED",
+                   "OUT-OF-BAND", "STACKED QUERIES", "BLIND SQLI"]
+SQLI_PAYLOADS = [
+    "' OR 1=1 --", "'; DROP TABLE users --", "' UNION SELECT @@version --",
+    "' WAITFOR DELAY '0:0:5' --", "1' AND 1=CONVERT(int, @@version) --",
+    "' OR '1'='1", "admin' --", "' UNION SELECT table_name,column_name FROM information_schema.columns --",
+]
+DB_VERSIONS = ["MySQL 8.0.32", "PostgreSQL 15.1", "MSSQL 2019", "Oracle 19c",
+               "SQLite 3.40", "MariaDB 10.11", "MongoDB 6.0", "Firebird 4.0"]
+
+# VPN tunnel
+VPN_PROTOCOLS = ["WireGuard", "OpenVPN", "IPSec/IKEv2", "L2TP", "PPTP", "SSTP", "SoftEther"]
+VPN_CIPHERS = ["ChaCha20-Poly1305", "AES-256-GCM", "AES-128-GCM", "Camellia-256",
+               "Twofish-256", "Serpent-256"]
+
+# Docker / K8s
+CONTAINER_IMAGES = ["nginx:latest", "ubuntu:22.04", "alpine:3.18", "python:3.11",
+                    "postgres:15", "redis:7", "node:20", "golang:1.21", "mariadb:10",
+                    "traefik:latest", "busybox:1.36", "httpd:latest"]
+K8S_POD_PHASES = ["Running", "Pending", "Succeeded", "Failed", "Unknown", "CrashLoopBackOff"]
+K8S_NODE_ROLES = ["control-plane", "worker", "infra", "monitoring", "logging", "storage"]
+
+# IoT botnet
+IOT_DEVICE_TYPES = ["Camera", "Router", "DVR", "Printer", "Sensor", "Thermostat",
+                    "Smart Plug", "Baby Monitor", "Doorbell", "Gateway"]
+IOT_FIRMWARE = ["v2.1.3", "v1.0.9", "v3.0.1", "v0.8.5", "v4.2.0", "v1.5.2-beta",
+                "v2.0.0", "v3.1.4-rc1"]
+IOT_VULNERABILITIES = ["CVE-2023-1234", "CVE-2024-5678", "default_creds:admin/admin",
+                       "telnet_open:23", "buffer_overflow:httpd", "command_injection:ping",
+                       "backdoor:port_32764", "unauthenticated_access"]
+
+# Packet craft
+PACKET_PROTOCOLS = ["TCP", "UDP", "ICMP", "ARP", "DNS", "DHCP", "HTTP", "TLS"]
+TCP_FLAGS = ["SYN", "ACK", "PSH", "FIN", "RST", "SYN-ACK", "URG", "ECE", "CWR"]
+
+# Stego detect
+STEGO_ALGORITHMS = ["LSB-substitution", "DCT-coefficient", "DWT-wavelet", "PVD",
+                    "Bit-plane", "Spread-spectrum", "Echo-hiding", "Phase-coding"]
+STEGO_FORMATS = ["PNG", "BMP", "JPEG", "TIFF", "GIF", "WAV", "MP3", "AVI"]
+
+# Crack map
+HASH_TYPES = ["MD5", "SHA1", "SHA256", "bcrypt", "NTLM", "LM", "SHA512",
+              "PBKDF2", "scrypt", "Argon2", "SHA3-256", "GOST"]
+
+# Aurora / particle
+AURORA_COLORS = ["\033[32m", "\033[36m", "\033[34m", "\033[35m", "\033[92m", "\033[96m"]
+
+# BIOS / POST
+BIOS_VENDORS = ["American Megatrends", "Phoenix Technologies", "Insyde Software",
+                "AMI", "UEFI", "Coreboot", "SeaBIOS", "TianoCore"]
+BIOS_COMPONENTS = ["CPU", "RAM", "SATA", "USB", "PCI", "VGA", "HD Audio", "NVMe",
+                   "TPM", "ACPI", "SMBIOS", "RTC", "PS/2", "COM Port"]
+BIOS_CPUS = ["Intel Core i9-14900K", "AMD Ryzen 9 7950X", "Intel Xeon Platinum",
+             "AMD EPYC 9654", "Apple M3 Max", "Qualcomm Snapdragon 8 Gen 3"]
+
+# Morse code
+MORSE_ALPHABET = {
+    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
+    'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
+    'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
+    'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
+    'Y': '-.--', 'Z': '--..', '0': '-----', '1': '.----', '2': '..---',
+    '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...',
+    '8': '---..', '9': '----.', '.': '.-.-.-', ',': '--..--', '?': '..--..',
+    "'": '.----.', '!': '-.-.--', '/': '-..-.', '(': '-.--.', ')': '-.--.-',
+    '&': '.-...', ':': '---...', ';': '-.-.-.', '=': '-...-', '+': '.-.-.',
+    '-': '-....-', '_': '..--.-', '"': '.-..-.', '$': '...-..-', '@': '.--.-.',
+    ' ': '/'
+}
+
+# Whois
+TLD_LIST = [".com", ".org", ".net", ".io", ".dev", ".app", ".co", ".ai", ".cloud", ".xyz"]
+REGISTRARS = ["GoDaddy", "Namecheap", "Cloudflare", "Google Domains", "AWS Route53",
+              "Name.com", "Gandi", "Hover", "Dynadot", "Porkbun"]
+
+# Cert scrape
+SSL_CIPHERS = ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256",
+               "TLS_AES_128_GCM_SHA256", "ECDHE-RSA-AES256-GCM-SHA384",
+               "ECDHE-ECDSA-AES128-GCM-SHA256", "DHE-RSA-AES256-SHA256"]
+SSL_PROTOCOLS = ["TLS 1.3", "TLS 1.2", "TLS 1.1", "TLS 1.0"]
+CERT_ISSUERS = ["Let's Encrypt", "DigiCert", "GlobalSign", "Sectigo", "GoDaddy",
+                "Comodo CA", "Entrust", "IdenTrust", "Amazon Trust Services",
+                "ZeroSSL", "Google Trust Services", "Microsoft Root Authority"]
+SSL_KEY_ALGOS = ["RSA 2048", "RSA 4096", "ECDSA P-256", "ECDSA P-384",
+                 "Ed25519", "Ed448"]
 
 ASSEMBLY_MNEMONICS = [
     "mov", "push", "pop", "call", "ret", "jmp", "je", "jne", "jg", "jl",

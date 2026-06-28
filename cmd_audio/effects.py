@@ -159,10 +159,13 @@ def build_banner_lines(text: str, width: int, align: str, anim: str, size: str, 
     if anim == "scroll":
         padded = ["   " + r + "   " for r in block_rows]
         total = len(padded[0])
-        offset = int(t * 6.0) % max(1, total)
+        # Align offset to character boundaries (each char is 6 columns: 5 + 1 gap)
+        char_width = 6
+        raw_offset = int(t * 6.0) % max(1, total)
+        offset = (raw_offset // char_width) * char_width
         result = []
         for r in padded:
-            doubled = r + r
+            doubled = r + r + r  # triple to ensure full coverage
             result.append(fit_text(doubled[offset: offset + width], width))
         return result
 

@@ -44,9 +44,11 @@ from cmd_audio.effects import (
 )
 from cmd_audio.visual import (
     VisualState,
+    ALL_VISUAL_MODULES,
     build_telemetry_lines,
     compose_center_panel,
     generate_shell_feed,
+    get_visual_modules_for_cycle,
     refresh_visual_state,
     render_paneled_visuals,
 )
@@ -323,6 +325,8 @@ def main() -> int:
     args = parse_args()
 
     if args.setup_ui:
+        # Automatically enable live controls when setup UI is used
+        args.ui = True
         started = setup_run_with_ui(args)
         if not started:
             return 0
@@ -606,7 +610,7 @@ def main() -> int:
         port_rows=[], admin_rows=[], last_refresh=0.0,
     )
 
-    keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l"
+    keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l w"
     mission_phase_name = MISSION_PHASES[0]["name"]
     mission_objective = MISSION_PHASES[0]["objective"]
     mission_phase_idx = 0
@@ -623,6 +627,12 @@ def main() -> int:
     tone_cooldown_until = 0.0
 
     theme_order = list(THEMES.keys())
+
+    # Visual module cycling state
+    visual_module_cycle_idx = 0
+    active_visual_modules = get_visual_modules_for_cycle(visual_module_cycle_idx)
+    next_visual_module_switch_at = random.uniform(3.0, 8.0)
+    visual_module_switch_interval = 5.0  # seconds between auto-switches
 
     if live_state is not None:
         live_state.set_scene_sync(args.scene_sync)
@@ -942,6 +952,11 @@ def main() -> int:
                 target_lock = TARGETS[(idx_tg + 1) % len(TARGETS)]
                 if live_state is not None:
                     live_state.set_target_lock(target_lock)
+            if key == "w":
+                # Manual visual module cycling
+                visual_module_cycle_idx += 1
+                active_visual_modules = get_visual_modules_for_cycle(visual_module_cycle_idx)
+                logs.append(f"!{visual_t:06.2f}s Visual    CYCLE      modules: {', '.join(active_visual_modules)}")
 
             if visual_t >= next_terminal_switch_at and not lock_scene:
                 other_modes = [m for m in terminal_modes if m != terminal_mode]
@@ -1080,6 +1095,16 @@ def main() -> int:
                 net_state = mission.net_state if (mission_timeline_enabled and random.random() < 0.75) else ("FIREWALL COLLAPSE" if (beat or flux > 0.72) else "UPLINK STABLE")
                 next_scene_shift_at = visual_t + random.uniform(1.0, 3.5)
 
+            # Auto-switch visual modules based on audio level/beat/time
+            if visual_t >= next_visual_module_switch_at and not lock_scene:
+                visual_module_cycle_idx += 1
+                active_visual_modules = get_visual_modules_for_cycle(visual_module_cycle_idx)
+                next_visual_module_switch_at = visual_t + random.uniform(3.0, 8.0)
+                # Also switch on beat with high flux
+                if beat and flux > 0.6:
+                    visual_module_cycle_idx += 1
+                    active_visual_modules = get_visual_modules_for_cycle(visual_module_cycle_idx)
+
             if beat or flux > 0.45 or visual_t >= next_shell_refresh_at:
                 shell_lines = generate_shell_feed(level, beat, terminal_mode)
                 next_shell_refresh_at = visual_t + random.uniform(0.45, 1.6)
@@ -1173,8 +1198,9 @@ def main() -> int:
             nodes, firewall, ports_arr, crypto = render_paneled_visuals(
                 level, pulse > 0, bands, history, shell_lines,
                 center_w - 2, max(2, (body_h - 2) // 4), quality_scale, module_levels, visual_state,
+                active_modules=active_visual_modules,
             )
-            center_lines = compose_center_panel(center_w - 2, body_h - 2, nodes, firewall, ports_arr, crypto)
+            center_lines = compose_center_panel(center_w - 2, body_h - 2, nodes, firewall, ports_arr, crypto, module_names=active_visual_modules)
 
             left_lines = logs[-(body_h - 2):]
             right_lines = build_telemetry_lines(
@@ -1185,6 +1211,8 @@ def main() -> int:
             )
 
             rows: List[str] = []
+            # Extract music name for display
+            music_display_name = os.path.basename(audio_path) if audio_path and audio_path != "(demo mode)" else "DEMO"
             header = f"{_cfg.GREEN_BRIGHT}CMD-AUDIO :: MUSIC SYNC CONSOLE :: {operation_mode}{_cfg.RESET}"
             beat_word = f"{_cfg.GREEN_BRIGHT}BEAT{_cfg.RESET}" if pulse > 0 else f"{_cfg.GREEN_DARK}IDLE{_cfg.RESET}"
             top_rule = f"{_cfg.GREEN_DIM}{'=' * max(1, width)}{_cfg.RESET}"
@@ -1193,7 +1221,11 @@ def main() -> int:
                 f"{header}   {beat_word}   lock:{target_lock}   mission:{mission_phase_name}   theme:{theme_name}   term:{terminal_mode}   ui:{mode_tag}",
                 width,
             )
-            rows.extend([top_rule, head_line])
+            music_line = fit_text(
+                f"{_cfg.GREEN_DIM}♪ Now Playing: {_cfg.GREEN_BRIGHT}{music_display_name}{_cfg.RESET}",
+                width,
+            )
+            rows.extend([top_rule, head_line, music_line])
 
             if show_banner or banner_text.strip():
                 for bl in build_banner_lines(banner_text, width, banner_align, banner_anim, banner_size, audio_t, pulse):
