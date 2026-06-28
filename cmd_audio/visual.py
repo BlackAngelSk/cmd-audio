@@ -343,7 +343,7 @@ def render_radar_sweep(
 
 
 # =========================================================================
-# 5. PARTICLE STORM
+# 5. PARTICLE STORM  [FIXED: no double-width Unicode chars to prevent UI breakage]
 # =========================================================================
 
 def render_particle_storm(
@@ -354,7 +354,8 @@ def render_particle_storm(
     state: Optional[VisualState] = None,
     module_level: Optional[float] = None,
 ) -> List[str]:
-    """Render an ASCII particle system / fireworks reacting to audio."""
+    """Render an ASCII particle system / fireworks reacting to audio.
+    Uses only single-width ASCII characters to avoid terminal alignment issues."""
     from cmd_audio.utils import clamp as _clamp
 
     lines: List[str] = []
@@ -380,15 +381,17 @@ def render_particle_storm(
         py = random.random() * height * 0.5
         pvx = (random.random() - 0.5) * 2
         pvy = random.random() * 2 + 1 if beat else random.random() * 1.5
-        pch = random.choice(_cfg.PARTICLE_CHARS)
+        # Use only single-width ASCII chars — no double-width Unicode to avoid UI breakage
+        pch = random.choice("*.:+#%@oO")
         plife = 10 + int(activity * 20) + (10 if beat else 0)
         new_particles.append((px, py, pvx, pvy, pch, plife))
 
     if state:
         state.particle_stars = new_particles[:100]  # cap at 100
 
+    # Use fit_text on each row to ensure consistent width despite variable-width chars
     for row in grid:
-        lines.append("".join(row))
+        lines.append(fit_text("".join(row), width))
 
     return lines[:height]
 
