@@ -113,11 +113,38 @@ def download_youtube_audio(url: str) -> str:
             "outtmpl": tmp_mp3_path.replace(".mp3", ""),
             "quiet": True,
             "no_warnings": True,
+            "ignoreerrors": True,
         }
 
         print(f"Downloading audio from: {url}", file=sys.stderr)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
-            ydl.download([url])
+            try:
+                ydl.download([url])
+            except Exception as e:
+                # If download fails, try to get info and use available format
+                try:
+                    info = ydl.extract_info(url, download=False)
+                    if info and "formats" in info:
+                        # Use the best available format
+                        formats = [f for f in info["formats"] if f.get("url")]
+                        if formats:
+                            best = formats[0]
+                            print(f"Using direct URL: {best.get('url', 'N/A')}", file=sys.stderr)
+                            # Download directly using the URL
+                            import urllib.request
+                            urllib.request.urlretrieve(best["url"], tmp_mp3_path)
+                        else:
+                            raise RuntimeError(f"No audio formats available for this video: {e}")
+                    else:
+                        raise RuntimeError(f"Could not extract video info: {e}")
+                except Exception as inner_e:
+                    if "YouTube download failed" in str(inner_e):
+                        raise inner_e
+                    raise RuntimeError(f"YouTube download failed: {inner_e}") from e
+
+        # Check if MP3 file was created
+        if not os.path.exists(tmp_mp3_path) or os.path.getsize(tmp_mp3_path) == 0:
+            raise RuntimeError("YouTube download did not create a valid audio file")
 
         cmd = ["ffmpeg", "-y", "-i", tmp_mp3_path, "-ac", "1", "-ar", "44100", tmp_wav]
         try:
@@ -135,6 +162,70 @@ def download_youtube_audio(url: str) -> str:
             os.unlink(tmp_mp3_path)
         except OSError:
             pass
+
+
+def get_random_attack_pattern() -> dict:
+    """Generate random attack pattern for visual effects."""
+    import random
+    
+    attack_types = [
+        "matrix_rain",
+        "glitch_effect",
+        "scanline_flash",
+        "color_inversion",
+        "pixelation",
+        "vhs_tracking",
+        "chromatic_aberration",
+        "signal_interference",
+    ]
+    
+    patterns = {
+        "matrix_rain": {
+            "intensity": random.uniform(0.3, 1.0),
+            "speed": random.uniform(0.5, 2.0),
+            "color_shift": random.choice([True, False]),
+        },
+        "glitch_effect": {
+            "frequency": random.uniform(0.1, 0.8),
+            "amplitude": random.uniform(0.2, 1.0),
+            "duration": random.uniform(0.1, 0.5),
+        },
+        "scanline_flash": {
+            "width": random.randint(1, 10),
+            "speed": random.uniform(1.0, 5.0),
+            "opacity": random.uniform(0.3, 1.0),
+        },
+        "color_inversion": {
+            "threshold": random.uniform(0.3, 0.9),
+            "fade_speed": random.uniform(0.5, 2.0),
+        },
+        "pixelation": {
+            "block_size": random.randint(2, 16),
+            "transition_speed": random.uniform(0.5, 2.0),
+        },
+        "vhs_tracking": {
+            "line_offset": random.randint(1, 20),
+            "noise_level": random.uniform(0.1, 0.5),
+            "stability": random.uniform(0.3, 0.9),
+        },
+        "chromatic_aberration": {
+            "offset": random.randint(1, 5),
+            "direction": random.choice(["horizontal", "vertical", "both"]),
+        },
+        "signal_interference": {
+            "frequency": random.uniform(0.5, 3.0),
+            "amplitude": random.uniform(0.2, 0.8),
+            "pattern": random.choice(["sine", "square", "sawtooth"]),
+        },
+    }
+    
+    selected_attack = random.choice(attack_types)
+    return {
+        "type": selected_attack,
+        "params": patterns[selected_attack],
+        "intensity": random.uniform(0.5, 1.0),
+        "duration": random.uniform(2.0, 10.0),
+    }
 
 
 def prepare_audio_input(args: object, audio_path: str) -> Tuple[str, str, bool]:

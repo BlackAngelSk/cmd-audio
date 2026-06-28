@@ -213,6 +213,34 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
     ttk.Label(tab_source, text="YouTube URL", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
     youtube_entry = ttk.Entry(tab_source, textvariable=youtube_var)
     youtube_entry.grid(row=1, column=1, sticky="ew", pady=4)
+    
+    # YouTube Play button
+    def play_youtube():
+        """Download and play YouTube audio with random attack patterns."""
+        url = youtube_var.get().strip()
+        if not url:
+            messagebox.showerror("Error", "Please enter a YouTube URL")
+            return
+        
+        if "youtube.com" not in url and "youtu.be" not in url:
+            messagebox.showerror("Error", "Please enter a valid YouTube URL")
+            return
+        
+        # Set source to file and use YouTube URL
+        source_var.set("file")
+        args.youtube = url
+        args.play = True
+        
+        # Show downloading message
+        messagebox.showinfo("Downloading", "YouTube audio is being downloaded...\nThis may take a moment.")
+        
+        # Start the run
+        _start_run()
+    
+    ttk.Button(
+        tab_source, text="▶ Play YouTube", style="Accent.TButton",
+        command=play_youtube,
+    ).grid(row=1, column=2, sticky="w", padx=(8, 0), pady=4)
 
     ttk.Label(tab_source, text="Audio File", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
     audio_entry = ttk.Entry(tab_source, textvariable=audio_var)

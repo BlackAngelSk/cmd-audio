@@ -568,8 +568,29 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
 
         ttk.Button(tab_music, text="Load Music", style="Accent.TButton", command=load_music_file).grid(row=2, column=1, sticky="w", pady=(8, 4))
 
-        ttk.Label(tab_music, text="Music Status", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Label(tab_music, textvariable=music_status_var, style="Value.TLabel").grid(row=3, column=1, sticky="w", pady=4)
+        # YouTube URL input for live control
+        youtube_var = tk.StringVar(value="")
+        ttk.Label(tab_music, text="YouTube URL", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Entry(tab_music, textvariable=youtube_var).grid(row=3, column=1, sticky="ew", pady=4)
+
+        def load_youtube_music() -> None:
+            """Download and load YouTube audio with random attack patterns."""
+            url = youtube_var.get().strip()
+            if not url:
+                music_status_var.set("Enter a YouTube URL first")
+                return
+            
+            if "youtube.com" not in url and "youtu.be" not in url:
+                music_status_var.set("Invalid YouTube URL")
+                return
+            
+            music_status_var.set("Downloading YouTube audio...")
+            state.request_music_change(url)
+
+        ttk.Button(tab_music, text="Load YouTube", style="Accent.TButton", command=load_youtube_music).grid(row=4, column=1, sticky="w", pady=(8, 4))
+
+        ttk.Label(tab_music, text="Music Status", style="Field.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Label(tab_music, textvariable=music_status_var, style="Value.TLabel").grid(row=5, column=1, sticky="w", pady=4)
 
         # ── Tab: Features ──────────────────────────────────────────
         tab_feat = ttk.Frame(notebook, padding=12)

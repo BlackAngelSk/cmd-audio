@@ -32,7 +32,7 @@ from cmd_audio.config import (
 from cmd_audio.utils import clamp, fit_text
 from cmd_audio.terminal import RawInput
 from cmd_audio.audio import AudioFeatures, make_demo_audio_features, read_audio_features
-from cmd_audio.audio_input import prepare_audio_input
+from cmd_audio.audio_input import prepare_audio_input, get_random_attack_pattern, is_youtube_url
 from cmd_audio.effects import (
     apply_terminal_fx,
     build_banner_lines,
@@ -651,7 +651,10 @@ def main() -> int:
         new_music = new_music_path.strip()
         if not new_music:
             return
-        if not os.path.exists(new_music):
+        
+        # Check if it's a YouTube URL
+        from cmd_audio.audio_input import is_youtube_url
+        if not is_youtube_url(new_music) and not os.path.exists(new_music):
             raise RuntimeError("Selected music file does not exist")
 
         prev_source = args.source
@@ -718,6 +721,9 @@ def main() -> int:
         audio_path = next_track
         return True
 
+    # Random attack pattern for YouTube
+    current_attack_pattern = None
+    attack_pattern_timer = 0.0
     ui_started = False
     try:
         while running:
@@ -759,6 +765,14 @@ def main() -> int:
                 pending_music = live_state.consume_music_change()
                 if pending_music:
                     try:
+                        # Check if it's a YouTube URL
+                        from cmd_audio.audio_input import is_youtube_url
+                        if is_youtube_url(pending_music):
+                            # Generate random attack pattern for YouTube
+                            current_attack_pattern = get_random_attack_pattern()
+                            attack_pattern_timer = time.time()
+                            logs.append(f"!{visual_t:06.2f}s YouTube    ATTACK     {current_attack_pattern['type']} (intensity: {current_attack_pattern['intensity']:.2f})")
+                        
                         switch_music_file(pending_music)
                     except Exception as exc:
                         live_state.set_music_status(f"Load failed: {exc}")
@@ -1032,6 +1046,24 @@ def main() -> int:
                     scanline_flash = max(0, scanline_flash - 1)
                     if random.random() < 0.25:
                         jitter = 0
+                
+                # Apply YouTube attack pattern effects
+                if current_attack_pattern and time.time() - attack_pattern_timer < current_attack_pattern['duration']:
+                    pattern = current_attack_pattern
+                    if pattern['type'] == 'glitch_effect':
+                        if random.random() < pattern['params']['frequency']:
+                            glitch_frames = max(glitch_frames, 3)
+                            jitter = 1
+                    elif pattern['type'] == 'scanline_flash':
+                        if random.random() < 0.3:
+                            scanline_flash = max(scanline_flash, 2)
+                    elif pattern['type'] == 'signal_interference':
+                        if random.random() < 0.2:
+                            jitter = 1
+                            glitch_frames = max(glitch_frames, 1)
+                elif current_attack_pattern:
+                    # Attack pattern expired
+                    current_attack_pattern = None
             else:
                 glitch_frames = 0
                 scanline_flash = 0
