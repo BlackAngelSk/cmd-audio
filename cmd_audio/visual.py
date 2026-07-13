@@ -59,6 +59,7 @@ class VisualState:
     morse_lines: List[str] = field(default_factory=list)
     whois_data: List[str] = field(default_factory=list)
     cert_data: List[str] = field(default_factory=list)
+    digital_glitch_buf: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +344,7 @@ def render_radar_sweep(
 
 
 # =========================================================================
-# 5. PARTICLE STORM  [FIXED: no double-width Unicode chars to prevent UI breakage]
+# 5. PARTICLE STORM
 # =========================================================================
 
 def render_particle_storm(
@@ -998,7 +999,116 @@ def render_morse_code(
 
 
 # =========================================================================
-# 17. WHOIS SCAN
+# 17. DIGITAL GLITCH
+# =========================================================================
+
+def render_digital_glitch(
+    level: float,
+    beat: bool,
+    width: int,
+    height: int,
+    state: Optional[VisualState] = None,
+    module_level: Optional[float] = None,
+) -> List[str]:
+    """Render a digital data-corruption / screen-tearing glitch effect."""
+    from cmd_audio.utils import clamp as _clamp
+
+    lines: List[str] = []
+    activity = _clamp(module_level if module_level is not None else level, 0.0, 1.0)
+    bar_w = max(8, width - 18)
+
+    corrupt_type = random.choice(_cfg.GLITCH_CORRUPTION_TYPES)
+    integrity = max(0, int((1.0 - activity) * 100))
+    bytes_corrupted = int(activity * 65536)
+
+    lines.append(fit_text(f"FAULT: {corrupt_type}  INTEGRITY: {integrity}%  CORRUPTED: {bytes_corrupted}B", width))
+    lines.append(fit_text(f"GLITCH {meter_bar(activity, bar_w)}", width))
+
+    # Build a grid of characters representing "normal" data that gets corrupted
+    grid_h = height - len(lines)
+    if grid_h <= 0:
+        return lines[:height]
+
+    grid: List[List[str]] = []
+    for _ in range(grid_h):
+        row = [random.choice("0123456789ABCDEF") for _ in range(width)]
+        grid.append(row)
+
+    # --- Corruption effects based on activity level ---
+
+    # 1) Character substitution noise (always present, scales with activity)
+    noise_count = int(activity * width * grid_h * 0.15)
+    for _ in range(noise_count):
+        ny = random.randint(0, grid_h - 1)
+        nx = random.randint(0, width - 1)
+        grid[ny][nx] = random.choice(_cfg.GLITCH_REPLACE_CHARS)
+
+    # 2) Horizontal row displacement (medium+ activity)
+    if activity > 0.3:
+        tear_count = max(1, int(activity * grid_h * 0.25))
+        for _ in range(tear_count):
+            ty = random.randint(0, grid_h - 1)
+            shift = random.randint(1, max(1, int(width * 0.3 * activity)))
+            if random.random() < 0.5:
+                grid[ty] = grid[ty][shift:] + grid[ty][:shift]
+            else:
+                grid[ty] = grid[ty][-shift:] + grid[ty][:-shift]
+
+    # 3) Block corruption rectangles (high activity)
+    if activity > 0.5:
+        block_count = max(1, int((activity - 0.4) * 6))
+        for _ in range(block_count):
+            bx = random.randint(0, max(0, width - 8))
+            by = random.randint(0, max(0, grid_h - 3))
+            bw = random.randint(3, min(12, width - bx))
+            bh = random.randint(1, min(3, grid_h - by))
+            noise_ch = random.choice(_cfg.GLITCH_NOISE_CHARS)
+            for dy in range(bh):
+                for dx in range(bw):
+                    if by + dy < grid_h and bx + dx < width:
+                        grid[by + dy][bx + dx] = noise_ch
+
+    # 4) Beat-triggered dramatic effects
+    if beat:
+        # Full-width glitch tear line
+        tear_y = random.randint(0, grid_h - 1)
+        for x in range(width):
+            grid[tear_y][x] = random.choice(_cfg.GLITCH_NOISE_CHARS)
+        # Invert a strip
+        if grid_h > 2:
+            inv_y = random.randint(0, grid_h - 1)
+            for x in range(width):
+                if random.random() < 0.6:
+                    grid[inv_y][x] = random.choice("!@#$%^&*")
+
+    # 5) Signal-loss static on extreme activity
+    if activity > 0.85:
+        static_rows = max(1, int((activity - 0.8) * grid_h * 2))
+        for _ in range(static_rows):
+            sy = random.randint(0, grid_h - 1)
+            for x in range(width):
+                grid[sy][x] = random.choice(_cfg.GLITCH_NOISE_CHARS)
+
+    # Apply ANSI coloring and build output lines
+    for y in range(grid_h):
+        row_str = "".join(grid[y])
+        if beat and y == grid_h // 2:
+            lines.append(f"{_cfg.STATUS_CRIT}{fit_text(row_str, width)}{_cfg.RESET}")
+        elif activity > 0.6 and y % 4 == 0:
+            lines.append(f"{_cfg.GREEN_DIM}{fit_text(row_str, width)}{_cfg.RESET}")
+        elif activity > 0.4 and random.random() < 0.15:
+            lines.append(f"{_cfg.STATUS_WARN}{fit_text(row_str, width)}{_cfg.RESET}")
+        else:
+            lines.append(fit_text(row_str, width))
+
+    if beat:
+        lines.append(fit_text(f"[!] DATA CORRUPTION SPIKE -- {corrupt_type}", width))
+
+    return lines[:height]
+
+
+# =========================================================================
+# 18. WHOIS SCAN
 # =========================================================================
 
 def render_whois_scan(
@@ -1841,6 +1951,8 @@ def render_visual_mode(
         return render_whois_scan(level, beat, width, height)
     elif mode == "cert-scrape":
         return render_cert_scrape(level, beat, width, height)
+    elif mode == "digital-glitch":
+        return render_digital_glitch(level, beat, width, height)
     else:
         return build_spectrum_lines(bands, width, height, history, shell_lines, quality_scale)
 
@@ -1854,7 +1966,7 @@ ALL_VISUAL_MODULES = [
     "particle-storm", "payload", "sql-injection", "vpn-tunnel",
     "docker-k8s", "iot-botnet", "packet-craft", "stego-detect",
     "crack-map", "aurora", "bios-poste", "morse-code",
-    "whois-scan", "cert-scrape",
+    "whois-scan", "cert-scrape", "digital-glitch",
 ]
 
 # Default set of 4 modules to show at any time
@@ -1946,6 +2058,8 @@ def render_visual_module(
         return render_whois_scan(level, beat, width, height, state=state, module_level=ml)
     elif module_name == "cert-scrape":
         return render_cert_scrape(level, beat, width, height, state=state, module_level=ml)
+    elif module_name == "digital-glitch":
+        return render_digital_glitch(level, beat, width, height, state=state, module_level=ml)
     else:
         return render_network_nodes(level, beat, width, height, state=state, module_level=ml)
 
@@ -2204,6 +2318,9 @@ def refresh_visual_state(
 
     if random.random() < (0.12 + (0.40 * module_levels.get("cert-scrape", 0.0))):
         state.cert_data = []
+
+    if random.random() < (0.12 + (0.40 * module_levels.get("digital-glitch", 0.0))):
+        state.digital_glitch_buf = []
 
     state.last_refresh = t
 

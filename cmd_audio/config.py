@@ -293,6 +293,15 @@ HASH_TYPES = ["MD5", "SHA1", "SHA256", "bcrypt", "NTLM", "LM", "SHA512",
 # Aurora / particle
 AURORA_COLORS = ["\033[32m", "\033[36m", "\033[34m", "\033[35m", "\033[92m", "\033[96m"]
 
+# Digital glitch
+GLITCH_CORRUPTION_TYPES = [
+    "BIT_ROT", "FRAME_DROP", "BUFFER_CORRUPT", "SIGNAL_LOSS",
+    "DMA_FAULT", "ECC_FAIL", "PACKET_FRAG", "OVERFLOW",
+    "UNDERFLOW", "HEAP_POISON", "STACK_SMASH", "RACE_COND",
+]
+GLITCH_NOISE_CHARS = list("█▓▒░▄▀▐▌╬╫╪┼┤├┬┴─│╗╗╚╝╔╔║═#+*~^%$@!?;:.,")
+GLITCH_REPLACE_CHARS = list("01Z@#$%&!?*xXoO|/\\{}[]<>~^`")
+
 # BIOS / POST
 BIOS_VENDORS = ["American Megatrends", "Phoenix Technologies", "Insyde Software",
                 "AMI", "UEFI", "Coreboot", "SeaBIOS", "TianoCore"]
