@@ -640,6 +640,13 @@ CURRENT_STYLE: Dict[str, str] = THEME_STYLES["matrix"]
 USE_UNICODE_BARS: bool = False
 
 # ---------------------------------------------------------------------------
+# Dynamic theme switching state
+# ---------------------------------------------------------------------------
+THEME_MODES: List[str] = ["manual", "bass"]
+CURRENT_THEME_MODE: str = "manual"
+BASS_THRESHOLD: float = 0.15  # sensitivity for bass spike detection
+
+# ---------------------------------------------------------------------------
 # Defaults and presets
 # ---------------------------------------------------------------------------
 DEFAULTS: Dict[str, float] = {
@@ -778,3 +785,17 @@ def set_bar_mode(use_unicode: bool) -> None:
     """Toggle Unicode vs ASCII bar characters."""
     global USE_UNICODE_BARS
     USE_UNICODE_BARS = bool(use_unicode)
+
+
+def set_theme_mode(mode: str) -> str:
+    """Set the dynamic theme switching mode ('manual' or 'bass')."""
+    global CURRENT_THEME_MODE
+    if mode in THEME_MODES:
+        CURRENT_THEME_MODE = mode
+    return CURRENT_THEME_MODE
+
+
+def set_bass_threshold(threshold: float) -> None:
+    """Set the bass spike detection threshold for theme switching."""
+    global BASS_THRESHOLD
+    BASS_THRESHOLD = max(0.01, min(1.0, float(threshold)))

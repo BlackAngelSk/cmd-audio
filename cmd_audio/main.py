@@ -26,8 +26,13 @@ from cmd_audio.config import (
     TARGETS,
     TERMINAL_PROFILES,
     THEMES,
+    THEME_MODES,
     apply_theme,
     set_bar_mode,
+    set_theme_mode,
+    set_bass_threshold,
+    CURRENT_THEME_MODE,
+    BASS_THRESHOLD,
 )
 from cmd_audio.utils import clamp, fit_text
 from cmd_audio.terminal import RawInput
@@ -259,6 +264,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--terminal-switch-min", type=float, default=4.0, help="Minimum seconds before switching terminal type")
     p.add_argument("--terminal-switch-max", type=float, default=11.0, help="Maximum seconds before switching terminal type")
     p.add_argument("--theme", choices=list(THEMES.keys()), default="matrix")
+    p.add_argument("--theme-mode", choices=THEME_MODES, default="manual", help="Dynamic theme switching: manual or bass")
+    p.add_argument("--bass-threshold", type=float, default=0.15, help="Bass spike threshold for theme switching (0.01-1.0)")
     p.add_argument("--banner-text", default="", help="Optional text banner to show in the output")
     p.add_argument("--banner-align", choices=["left", "center", "right"], default="center")
     p.add_argument("--banner-anim", choices=["off", "scroll", "pulse"], default="off")
@@ -303,6 +310,10 @@ def parse_args() -> argparse.Namespace:
         apply_preset(args, args.preset)
     if normalize_theme(args.theme) is None:
         args.theme = "matrix"
+    if args.theme_mode not in THEME_MODES:
+        args.theme_mode = "manual"
+    set_theme_mode(args.theme_mode)
+    set_bass_threshold(args.bass_threshold)
     return args
 
 
@@ -411,7 +422,7 @@ def main() -> int:
         live_state = LiveControlState(
             args.sensitivity, args.speed_min, args.speed_max,
             args.terminal_switch_min, args.terminal_switch_max,
-            theme_name, args.banner_text, args.banner_align, args.banner_anim, args.banner_size,
+            theme_name, args.theme_mode, args.banner_text, args.banner_align, args.banner_anim, args.banner_size,
             bool(args.show_banner), args.ui_style, args.quality_mode, bool(args.unicode_bars),
             args.scene_sync, bool(args.alert_tones), bool(args.mission_timeline),
             bool(args.defender_ai), bool(args.audio_fx),
@@ -610,7 +621,7 @@ def main() -> int:
         port_rows=[], admin_rows=[], last_refresh=0.0,
     )
 
-    keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l w"
+    keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l w d D"
     mission_phase_name = MISSION_PHASES[0]["name"]
     mission_objective = MISSION_PHASES[0]["objective"]
     mission_phase_idx = 0
@@ -627,6 +638,12 @@ def main() -> int:
     tone_cooldown_until = 0.0
 
     theme_order = list(THEMES.keys())
+    theme_mode = args.theme_mode
+
+    # Bass detection state
+    bass_history: list = []
+    last_bass_switch_at = 0.0  # visual_t timestamp of last bass-triggered switch
+    BASS_COOLDOWN = 0.8  # seconds between theme switches
 
     # Visual module cycling state
     visual_module_cycle_idx = 0
@@ -757,6 +774,9 @@ def main() -> int:
                 lock_scene = snap.lock_scene
                 if snap.theme_name != theme_name:
                     theme_name = apply_theme(snap.theme_name)
+                if snap.theme_mode != theme_mode:
+                    theme_mode = snap.theme_mode
+                    set_theme_mode(theme_mode)
                 if snap.unicode_bars != (not _cfg.USE_UNICODE_BARS):
                     set_bar_mode(snap.unicode_bars)
                 if snap.terminal_mode in terminal_modes and snap.terminal_mode != terminal_mode:
@@ -957,6 +977,23 @@ def main() -> int:
                 visual_module_cycle_idx += 1
                 active_visual_modules = get_visual_modules_for_cycle(visual_module_cycle_idx)
                 logs.append(f"!{visual_t:06.2f}s Visual    CYCLE      modules: {', '.join(active_visual_modules)}")
+            if key == "d":
+                # Toggle bass mode on/off
+                if theme_mode == "manual":
+                    theme_mode = "bass"
+                else:
+                    theme_mode = "manual"
+                set_theme_mode(theme_mode)
+                logs.append(f"!{visual_t:06.2f}s Theme     MODE       {theme_mode}")
+                if live_state is not None:
+                    live_state.set_theme_mode(theme_mode)
+            if key == "D":
+                # Cycle backward through themes
+                idx_theme = theme_order.index(theme_name)
+                theme_name = apply_theme(theme_order[(idx_theme - 1) % len(theme_order)])
+                if live_state is not None:
+                    live_state.set_theme(theme_name)
+                logs.append(f"!{visual_t:06.2f}s Theme     BACKWARD   {theme_name}")
 
             if visual_t >= next_terminal_switch_at and not lock_scene:
                 other_modes = [m for m in terminal_modes if m != terminal_mode]
@@ -1006,6 +1043,21 @@ def main() -> int:
             bass = sum(bands[:2]) / max(1, len(bands[:2]))
             mids = sum(bands[2:5]) / max(1, len(bands[2:5]))
             highs = sum(bands[5:]) / max(1, len(bands[5:]))
+
+            # --- Bass-reactive theme switching ---
+            if theme_mode == "bass":
+                bass_history.append(bass)
+                if len(bass_history) > 30:
+                    bass_history = bass_history[-30:]
+                bass_avg = sum(bass_history) / max(1, len(bass_history))
+                hard_bass = (bass > bass_avg * 1.6 + _cfg.BASS_THRESHOLD) and (level > 0.4)
+                if hard_bass and (visual_t - last_bass_switch_at) > BASS_COOLDOWN:
+                    idx_theme = theme_order.index(theme_name)
+                    theme_name = apply_theme(theme_order[(idx_theme + 1) % len(theme_order)])
+                    last_bass_switch_at = visual_t
+                    logs.append(f"!{visual_t:06.2f}s Bass      SWITCH     theme={theme_name}  bass={bass:.3f}  avg={bass_avg:.3f}")
+                    if live_state is not None:
+                        live_state.set_theme(theme_name)
             module_levels = {
                 "nodes": clamp(((0.40 * level) + (0.95 * mids)) * scene_pack_weights["nodes"], 0.0, 1.0),
                 "files": clamp(((0.50 * level) + (0.25 * mids) + (0.25 * highs)) * scene_pack_weights["files"], 0.0, 1.0),
@@ -1218,7 +1270,7 @@ def main() -> int:
             top_rule = f"{_cfg.GREEN_DIM}{'=' * max(1, width)}{_cfg.RESET}"
             mode_tag = "MIN" if args.ui_style == "minimal" else "FULL"
             head_line = fit_text(
-                f"{header}   {beat_word}   lock:{target_lock}   mission:{mission_phase_name}   theme:{theme_name}   term:{terminal_mode}   ui:{mode_tag}",
+                f"{header}   {beat_word}   lock:{target_lock}   mission:{mission_phase_name}   theme:{theme_name}({theme_mode})   term:{terminal_mode}   ui:{mode_tag}",
                 width,
             )
             music_line = fit_text(

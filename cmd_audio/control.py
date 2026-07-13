@@ -7,7 +7,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from cmd_audio.config import OPERATION_MODES, TARGETS, TERMINAL_PROFILES, THEMES
+from cmd_audio.config import OPERATION_MODES, TARGETS, TERMINAL_PROFILES, THEMES, THEME_MODES
 
 
 # ---------------------------------------------------------------------------
@@ -22,6 +22,7 @@ class RuntimeSnapshot:
     terminal_switch_min: float
     terminal_switch_max: float
     theme_name: str
+    theme_mode: str
     banner_text: str
     banner_align: str
     banner_anim: str
@@ -59,6 +60,7 @@ class LiveControlState:
         terminal_switch_min: float,
         terminal_switch_max: float,
         theme_name: str,
+        theme_mode: str,
         banner_text: str,
         banner_align: str,
         banner_anim: str,
@@ -85,6 +87,7 @@ class LiveControlState:
         self._terminal_switch_min = terminal_switch_min
         self._terminal_switch_max = terminal_switch_max
         self._theme_name = theme_name
+        self._theme_mode = theme_mode if theme_mode in THEME_MODES else "manual"
         self._banner_text = banner_text
         self._banner_align = banner_align if banner_align in ("left", "center", "right") else "center"
         self._banner_anim = banner_anim if banner_anim in ("off", "scroll", "pulse") else "off"
@@ -118,6 +121,7 @@ class LiveControlState:
                 terminal_switch_min=self._terminal_switch_min,
                 terminal_switch_max=self._terminal_switch_max,
                 theme_name=self._theme_name,
+                theme_mode=self._theme_mode,
                 banner_text=self._banner_text,
                 banner_align=self._banner_align,
                 banner_anim=self._banner_anim,
@@ -167,6 +171,11 @@ class LiveControlState:
         with self._lock:
             if theme_name in THEMES:
                 self._theme_name = theme_name
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        with self._lock:
+            if theme_mode in THEME_MODES:
+                self._theme_mode = theme_mode
 
     def set_banner_text(self, banner_text: str) -> None:
         with self._lock:
@@ -429,6 +438,7 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
         switch_min_var = tk.DoubleVar(value=ss.terminal_switch_min)
         switch_max_var = tk.DoubleVar(value=ss.terminal_switch_max)
         theme_var = tk.StringVar(value=ss.theme_name)
+        theme_mode_var = tk.StringVar(value=ss.theme_mode)
         banner_var = tk.StringVar(value=ss.banner_text)
         banner_align_var = tk.StringVar(value=ss.banner_align)
         banner_anim_var = tk.StringVar(value=ss.banner_anim)
@@ -497,16 +507,19 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
         ttk.Label(tab_visual, text="Theme", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
         ttk.Combobox(tab_visual, textvariable=theme_var, values=list(THEMES.keys()), state="readonly").grid(row=0, column=1, sticky="ew", pady=4)
 
-        ttk.Label(tab_visual, text="Scene Sync", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Combobox(tab_visual, textvariable=scene_sync_var, values=["adaptive", "bpm", "hybrid"], state="readonly").grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Label(tab_visual, text="Theme Mode", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Combobox(tab_visual, textvariable=theme_mode_var, values=["manual", "bass"], state="readonly").grid(row=1, column=1, sticky="ew", pady=4)
 
-        ttk.Label(tab_visual, text="UI Style", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Combobox(tab_visual, textvariable=ui_style_var, values=["full", "minimal"], state="readonly").grid(row=2, column=1, sticky="ew", pady=4)
+        ttk.Label(tab_visual, text="Scene Sync", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Combobox(tab_visual, textvariable=scene_sync_var, values=["adaptive", "bpm", "hybrid"], state="readonly").grid(row=2, column=1, sticky="ew", pady=4)
 
-        ttk.Label(tab_visual, text="Quality", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Combobox(tab_visual, textvariable=quality_mode_var, values=["auto", "off"], state="readonly").grid(row=3, column=1, sticky="ew", pady=4)
+        ttk.Label(tab_visual, text="UI Style", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Combobox(tab_visual, textvariable=ui_style_var, values=["full", "minimal"], state="readonly").grid(row=3, column=1, sticky="ew", pady=4)
 
-        ttk.Checkbutton(tab_visual, text="Unicode Bars", variable=unicode_bars_var).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        ttk.Label(tab_visual, text="Quality", style="Field.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Combobox(tab_visual, textvariable=quality_mode_var, values=["auto", "off"], state="readonly").grid(row=4, column=1, sticky="ew", pady=4)
+
+        ttk.Checkbutton(tab_visual, text="Unicode Bars", variable=unicode_bars_var).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 4))
 
         # ── Tab: Terminal ──────────────────────────────────────────
         tab_term = ttk.Frame(notebook, padding=12)
@@ -625,6 +638,7 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
             state.set_speed_bounds(float(speed_min_var.get()), float(speed_max_var.get()))
             state.set_terminal_switch_bounds(float(switch_min_var.get()), float(switch_max_var.get()))
             state.set_theme(theme_var.get())
+            state.set_theme_mode(theme_mode_var.get())
             state.set_scene_sync(scene_sync_var.get())
             state.set_ui_style(ui_style_var.get())
             state.set_quality_mode(quality_mode_var.get())
@@ -646,7 +660,7 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
 
         for var in (
             sensitivity_var, speed_min_var, speed_max_var,
-            switch_min_var, switch_max_var, theme_var,
+            switch_min_var, switch_max_var, theme_var, theme_mode_var,
             scene_sync_var, ui_style_var, quality_mode_var,
             unicode_bars_var, alert_tones_var, mission_timeline_var,
             defender_ai_var, audio_fx_var, terminal_mode_var,
@@ -667,6 +681,7 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
             switch_min_var.set(ss_now.terminal_switch_min)
             switch_max_var.set(ss_now.terminal_switch_max)
             theme_var.set(ss_now.theme_name)
+            theme_mode_var.set(ss_now.theme_mode)
             scene_sync_var.set(ss_now.scene_sync)
             ui_style_var.set(ss_now.ui_style)
             quality_mode_var.set(ss_now.quality_mode)
