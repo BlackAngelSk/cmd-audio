@@ -65,6 +65,9 @@ from cmd_audio.mission import (
     should_shift_scene,
 )
 from cmd_audio.control import LiveControlState, LiveUIHandle, start_live_control_window
+from cmd_audio.logging_config import setup_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -216,12 +219,12 @@ def print_diagnostics(args: argparse.Namespace, audio_path: str, playback_path: 
     aplay_ok = shutil.which("aplay") is not None
     bpm = f"{audio.bpm_estimate:.1f}" if audio is not None and audio.bpm_estimate > 0 else "n/a"
     duration = f"{audio.duration:.2f}s" if audio is not None else "n/a"
-    print("[diag] source=", args.source, file=sys.stderr)
-    print("[diag] audio=", audio_path or "(none)", file=sys.stderr)
-    print("[diag] playback=", playback_path or "(none)", file=sys.stderr)
-    print("[diag] fps=", args.fps, " terminal=", f"{term.columns}x{term.lines}", file=sys.stderr)
-    print("[diag] ffmpeg=", ffmpeg_ok, " ffplay=", ffplay_ok, " aplay=", aplay_ok, file=sys.stderr)
-    print("[diag] duration=", duration, " bpm=", bpm, file=sys.stderr)
+    logger.debug("source=%s", args.source)
+    logger.debug("audio=%s", audio_path or "(none)")
+    logger.debug("playback=%s", playback_path or "(none)")
+    logger.debug("fps=%s terminal=%sx%s", args.fps, term.columns, term.lines)
+    logger.debug("ffmpeg=%s ffplay=%s aplay=%s", ffmpeg_ok, ffplay_ok, aplay_ok)
+    logger.debug("duration=%s bpm=%s", duration, bpm)
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +336,14 @@ def clear_and_home() -> None:
 def main() -> int:
     from cmd_audio.ui_setup import setup_run_with_ui
 
+    # Initialize logging based on diagnostics flag
+    verbosity = 2 if getattr(parse_args(), 'diagnostics', False) else 1
+    setup_logging(verbosity=verbosity)
+
     args = parse_args()
+
+    # Re-setup logging with correct verbosity after args parsing
+    setup_logging(verbosity=2 if args.diagnostics else 1)
 
     if args.setup_ui:
         # Automatically enable live controls when setup UI is used
@@ -347,7 +357,7 @@ def main() -> int:
         try:
             plugin_module = load_plugin_module(args.plugin)
         except Exception as exc:
-            print(f"Plugin error: {exc}", file=sys.stderr)
+            logger.error("Plugin error: %s", exc)
             return 1
 
     custom_scene_packs: Dict[str, Dict[str, Any]] = {}
@@ -355,7 +365,7 @@ def main() -> int:
         try:
             custom_scene_packs = load_scene_packs(args.scene_pack_file)
         except (OSError, ValueError) as exc:
-            print(f"Scene pack error: {exc}", file=sys.stderr)
+            logger.error("Scene pack error: %s", exc)
             return 1
 
     active_scene_pack_name = args.scene_pack.strip()
@@ -366,7 +376,7 @@ def main() -> int:
     if active_scene_pack_name:
         chosen_pack = all_scene_packs.get(active_scene_pack_name)
         if chosen_pack is None:
-            print(f"Unknown scene pack: {active_scene_pack_name}", file=sys.stderr)
+            logger.error("Unknown scene pack: %s", active_scene_pack_name)
             return 1
         scene_pack_weights = apply_scene_pack(args, chosen_pack)
 
@@ -436,7 +446,7 @@ def main() -> int:
         try:
             replay_frames = load_replay_frames(args.replay_file)
         except (OSError, ValueError) as exc:
-            print(f"Replay error: {exc}", file=sys.stderr)
+            logger.error("Replay error: %s", exc)
             close_live_ui()
             return 1
         raw = RawInput()
@@ -500,7 +510,7 @@ def main() -> int:
             try:
                 playlist_tracks = load_playlist_file(args.playlist)
             except (OSError, ValueError) as exc:
-                print(f"Playlist error: {exc}", file=sys.stderr)
+                logger.error("Playlist error: %s", exc)
                 close_live_ui()
                 return 1
         elif audio_path:
@@ -523,14 +533,14 @@ def main() -> int:
         try:
             wav_input, playback_input, cleanup_wav = prepare_audio_input(args, audio_path)
         except RuntimeError as exc:
-            print(str(exc), file=sys.stderr)
+            logger.error("%s", exc)
             close_live_ui()
             return 1
 
         try:
             audio = read_audio_features(wav_input, args.fps)
         except KeyboardInterrupt:
-            print("Interrupted during audio analysis.", file=sys.stderr)
+            logger.warning("Interrupted during audio analysis.")
             close_live_ui()
             if cleanup_wav:
                 try:
@@ -539,7 +549,7 @@ def main() -> int:
                     pass
             return 130
         except (wave.Error, ValueError) as exc:
-            print(f"Failed to read audio: {exc}", file=sys.stderr)
+            logger.error("Failed to read audio: %s", exc)
             close_live_ui()
             return 1
 
@@ -564,7 +574,7 @@ def main() -> int:
         try:
             rec = open_record_writer(args.record_file, args.record_mode)
         except (OSError, ValueError) as exc:
-            print(f"Record error: {exc}", file=sys.stderr)
+            logger.error("Record error: %s", exc)
             close_live_ui()
             return 1
 
@@ -1361,7 +1371,7 @@ def main() -> int:
             try:
                 subprocess.run(args.video_hook, shell=True, env=env, check=False)
             except Exception as exc:
-                print(f"Video hook error: {exc}", file=sys.stderr)
+                logger.error("Video hook error: %s", exc)
         if player and player.poll() is None:
             player.terminate()
         if cleanup_wav:

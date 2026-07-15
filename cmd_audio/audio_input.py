@@ -8,6 +8,10 @@ import sys
 import tempfile
 from typing import Tuple
 
+from cmd_audio.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def ensure_wav_input(audio_path: str, keep_converted: bool = False) -> Tuple[str, bool]:
     """Convert non-WAV input to WAV via ffmpeg. Returns (path, needs_cleanup)."""
@@ -35,7 +39,7 @@ def ensure_wav_input(audio_path: str, keep_converted: bool = False) -> Tuple[str
         raise RuntimeError("ffmpeg failed to convert input audio") from exc
 
     if keep_converted:
-        print(f"Converted audio saved to: {tmp_wav}", file=sys.stderr)
+        logger.info("Converted audio saved to: %s", tmp_wav)
         return tmp_wav, False
     return tmp_wav, True
 
@@ -102,7 +106,7 @@ def _download_youtube_via_module(url: str, tmp_mp3_path: str, tmp_wav: str) -> s
         "ignoreerrors": True,
     }
 
-    print(f"Downloading audio from: {url}", file=sys.stderr)
+    logger.info("Downloading audio from: %s", url)
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
         try:
             ydl.download([url])
@@ -115,7 +119,7 @@ def _download_youtube_via_module(url: str, tmp_mp3_path: str, tmp_wav: str) -> s
                     formats = [f for f in (info["formats"] or []) if f.get("url")]
                     if formats:
                         best = formats[0]
-                        print(f"Using direct URL: {best.get('url', 'N/A')}", file=sys.stderr)
+                        logger.debug("Using direct URL: %s", best.get('url', 'N/A'))
                         # Download directly using the URL
                         import urllib.request
                         urllib.request.urlretrieve(best["url"], tmp_mp3_path)
@@ -140,7 +144,7 @@ def _download_youtube_via_module(url: str, tmp_mp3_path: str, tmp_wav: str) -> s
     except subprocess.CalledProcessError as exc:
         raise RuntimeError("ffmpeg failed to convert YouTube audio") from exc
 
-    print(f"YouTube audio saved to: {tmp_wav}", file=sys.stderr)
+    logger.info("YouTube audio saved to: %s", tmp_wav)
     return tmp_wav
 
 
@@ -152,7 +156,7 @@ def _download_youtube_via_cli(url: str, tmp_wav: str) -> str:
     tmp_mp3.close()
 
     try:
-        print(f"Downloading audio from: {url} (via yt-dlp CLI)", file=sys.stderr)
+        logger.info("Downloading audio from: %s (via yt-dlp CLI)", url)
 
         # yt-dlp CLI: download best audio, extract as mp3
         yt_cmd = [
@@ -201,7 +205,7 @@ def _download_youtube_via_cli(url: str, tmp_wav: str) -> str:
             except OSError:
                 pass
 
-        print(f"YouTube audio saved to: {tmp_wav}", file=sys.stderr)
+        logger.info("YouTube audio saved to: %s", tmp_wav)
         return tmp_wav
 
     finally:
@@ -334,8 +338,8 @@ def prepare_audio_input(args: object, audio_path: str) -> Tuple[str, str, bool]:
                 wav_input = download_youtube_audio(audio_path)
                 return wav_input, wav_input, True
             except RuntimeError as e:
-                print(f"YouTube support unavailable: {e}", file=sys.stderr)
-                print("Please provide a local audio file instead.", file=sys.stderr)
+                logger.error("YouTube support unavailable: %s", e)
+                logger.error("Please provide a local audio file instead.")
                 raise
 
         if not os.path.exists(audio_path):
@@ -344,5 +348,5 @@ def prepare_audio_input(args: object, audio_path: str) -> Tuple[str, str, bool]:
         return wav_input, wav_input, cleanup
 
     captured = capture_to_wav(source, capture_seconds)
-    print(f"Captured {source} audio to: {captured}", file=sys.stderr)
+    logger.info("Captured %s audio to: %s", source, captured)
     return captured, captured, True

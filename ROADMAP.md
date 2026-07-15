@@ -21,7 +21,7 @@ These are low-risk improvements that make the codebase more maintainable and rob
 | 1.1 | **Unit test suite** | Add `pytest` tests for audio features, visual rendering, config parsing, mission timeline, and scene pack loading. Currently there are zero tests. |
 | 1.2 | **Type hints & mypy strictness** | The codebase uses `from __future__ import annotations` but many functions lack full type annotations. Add strict typing throughout. |
 | 1.3 | **Refactor `main.py` monolith** | `main.py` is 1374 lines with the entire render loop, key handling, audio switching, and UI management in one function. Split into `render_loop.py`, `input_handler.py`, `audio_manager.py`. |
-| 1.4 | **Logging system** | Replace `print(..., file=sys.stderr)` and ad-hoc log lists with a proper `logging` module integration with configurable verbosity levels. |
+| 1.4 | **Logging system** | Replace `print(..., file=sys.stderr)` and ad-hoc log lists with a proper `logging` module integration with configurable verbosity levels. ✅ **Done** (see `logging_config.py`) |
 | 1.5 | **Error handling improvements** | Many bare `except Exception: pass` blocks. Add structured error handling with meaningful messages and optional crash reports. |
 | 1.6 | **Config validation** | Add schema validation for JSON configs using a `dataclass` or `pydantic` model to catch malformed configs early. |
 | 1.7 | **CLI help documentation** | Improve `--help` output with examples, group arguments into sections, and generate man-page output. |

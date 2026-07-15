@@ -6,6 +6,10 @@ import argparse
 import sys
 from typing import Any
 
+from cmd_audio.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def _apply_dark_theme(root, style: Any) -> None:
     """Configure a dark cyberpunk colour scheme for ttk widgets."""
@@ -132,7 +136,7 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
         import tkinter as tk
         from tkinter import filedialog, messagebox, ttk
     except Exception:
-        print("UI unavailable: tkinter is not installed", file=sys.stderr)
+        logger.warning("UI unavailable: tkinter is not installed")
         return False
 
     root = tk.Tk()

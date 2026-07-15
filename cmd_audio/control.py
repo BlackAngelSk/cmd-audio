@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from cmd_audio.config import OPERATION_MODES, TARGETS, TERMINAL_PROFILES, THEMES, THEME_MODES
+from cmd_audio.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +415,7 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
         import tkinter as tk
         from tkinter import filedialog, ttk
     except Exception:
-        print("UI unavailable: tkinter is not installed", file=sys.stderr)
+        logger.warning("UI unavailable: tkinter is not installed")
         return None
 
     stop_event = threading.Event()
@@ -421,7 +424,7 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
         try:
             root = tk.Tk()
         except Exception as exc:
-            print(f"UI window unavailable: {exc}", file=sys.stderr)
+            logger.error("UI window unavailable: %s", exc)
             return
         root.title("CMD-AUDIO  //  Live Controls")
         root.resizable(True, True)
