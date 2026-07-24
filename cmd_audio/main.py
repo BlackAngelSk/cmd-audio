@@ -66,6 +66,8 @@ from cmd_audio.mission import (
 )
 from cmd_audio.control import LiveControlState, LiveUIHandle, start_live_control_window
 from cmd_audio.logging_config import setup_logging, get_logger
+from cmd_audio.web_server import start_web_server, AudioServer
+from cmd_audio.remote_control import create_remote_control
 
 logger = get_logger(__name__)
 
@@ -300,7 +302,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-setup-ui", dest="setup_ui", action="store_false")
     p.add_argument("--ui", dest="ui", action="store_true")
     p.add_argument("--no-ui", dest="ui", action="store_false")
-    p.set_defaults(play=True, ui=True, mission_timeline=True, defender_ai=True, audio_fx=True, setup_ui=False)
+    p.add_argument("--web", dest="web", action="store_true", help="Start web server for browser visualization")
+    p.add_argument("--web-port", type=int, default=8080, help="Web server port")
+    p.add_argument("--web-host", default="localhost", help="Web server host")
+    p.add_argument("--remote-control", dest="remote_control", action="store_true", help="Enable remote control socket")
+    p.add_argument("--remote-port", type=int, default=9999, help="Remote control port")
+    p.add_argument("--normalize", action="store_true", help="Normalize audio levels across tracks")
+    p.set_defaults(play=True, ui=True, mission_timeline=True, defender_ai=True, audio_fx=True, setup_ui=False, web=False, remote_control=False, normalize=False)
     first_pass = p.parse_known_args()[0]
 
     argv = sys.argv[1:]
@@ -420,6 +428,7 @@ def main() -> int:
     set_bar_mode(args.unicode_bars)
     live_state: Optional[LiveControlState] = None
     live_ui: Optional[LiveUIHandle] = None
+    web_server: Optional[AudioServer] = None
     initial_music_file = args.youtube or " ".join(args.audio).strip() or "(demo mode)"
 
     def close_live_ui() -> None:
@@ -438,6 +447,24 @@ def main() -> int:
             bool(args.defender_ai), bool(args.audio_fx),
             "netrunner", OPERATION_MODES[0], TARGETS[0], False, initial_music_file,
         )
+
+    # Start web server if requested
+    if args.web:
+        try:
+            web_server = start_web_server(host=args.web_host, port=args.web_port)
+            logger.info("Web server started at http://%s:%d", args.web_host, args.web_port)
+        except Exception as exc:
+            logger.error("Failed to start web server: %s", exc)
+
+    # Start remote control socket if requested
+    remote_sock = None
+    if args.remote_control:
+        try:
+            remote_sock = create_remote_control()
+            remote_sock.start()
+            logger.info("Remote control socket started at %s", remote_sock.socket_path)
+        except Exception as exc:
+            logger.error("Failed to start remote control: %s", exc)
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -1330,10 +1357,15 @@ def main() -> int:
             rows.append(footer)
             rows.append(top_rule)
             rows = apply_terminal_fx(rows, width, glitch_frames, scanline_flash, jitter)
+            # Pad rows to exactly height lines to prevent vertical shift
+            while len(rows) < height:
+                rows.append(" " * width)
+            rows = rows[:height]
             frame = "\n".join(rows)
 
-            sys.stdout.write("\033[H\033[J")
+            sys.stdout.write("\033[H")
             sys.stdout.write(frame)
+            sys.stdout.write("\033[J")
             sys.stdout.flush()
 
             if args.ui and live_state is not None and not ui_started:
@@ -1378,6 +1410,16 @@ def main() -> int:
             try:
                 os.unlink(wav_input)
             except OSError:
+                pass
+        if web_server is not None:
+            try:
+                web_server.stop()
+            except Exception:
+                pass
+        if remote_sock is not None:
+            try:
+                remote_sock.stop()
+            except Exception:
                 pass
         close_live_ui()
 

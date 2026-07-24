@@ -619,6 +619,132 @@ def start_live_control_window(state: LiveControlState) -> Optional[LiveUIHandle]
         ttk.Checkbutton(tab_feat, text="Defender AI", variable=defender_ai_var).grid(row=1, column=0, sticky="w", pady=4, padx=4)
         ttk.Checkbutton(tab_feat, text="Audio FX", variable=audio_fx_var).grid(row=1, column=1, sticky="w", pady=4, padx=4)
 
+        # ── Tab: Streaming & Remote ────────────────────────────────
+        tab_stream = ttk.Frame(notebook, padding=12)
+        notebook.add(tab_stream, text="  Streaming  ")
+        tab_stream.columnconfigure(1, weight=1)
+
+        ttk.Label(tab_stream, text="Streaming Mode", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        stream_mode_var = tk.StringVar(value="file")
+        ttk.Combobox(tab_stream, textvariable=stream_mode_var, values=["file", "mic", "system"], state="readonly").grid(row=0, column=1, sticky="ew", pady=4)
+
+        ttk.Label(tab_stream, text="Sample Rate", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        sample_rate_var = tk.StringVar(value="44100")
+        ttk.Combobox(tab_stream, textvariable=sample_rate_var, values=["22050", "44100", "48000"], state="readonly").grid(row=1, column=1, sticky="ew", pady=4)
+
+        ttk.Label(tab_stream, text="Normalization", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        normalize_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(tab_stream, text="Enable Volume Normalization", variable=normalize_var).grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(tab_stream, text="Web Server", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        web_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(tab_stream, text="Enable Web Server", variable=web_var).grid(row=3, column=1, sticky="w", pady=4)
+
+        web_port_var = tk.IntVar(value=8080)
+        ttk.Label(tab_stream, text="Web Port", style="Field.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Combobox(tab_stream, textvariable=web_port_var, values=["8080", "8081", "8082"], state="readonly").grid(row=4, column=1, sticky="ew", pady=4)
+
+        ttk.Label(tab_stream, text="Remote Control", style="Field.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
+        remote_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(tab_stream, text="Enable Remote Socket", variable=remote_var).grid(row=5, column=1, sticky="w", pady=4)
+
+        remote_port_var = tk.IntVar(value=9999)
+        ttk.Label(tab_stream, text="Remote Port", style="Field.TLabel").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Combobox(tab_stream, textvariable=remote_port_var, values=["9998", "9999", "10000"], state="readonly").grid(row=6, column=1, sticky="ew", pady=4)
+
+        # ── Tab: Plugins & Favorites ──────────────────────────────
+        tab_plugins = ttk.Frame(notebook, padding=12)
+        notebook.add(tab_plugins, text="  Plugins  ")
+        tab_plugins.columnconfigure(1, weight=1)
+
+        ttk.Label(tab_plugins, text="Load Plugin", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        plugin_var = tk.StringVar(value="")
+        ttk.Entry(tab_plugins, textvariable=plugin_var).grid(row=0, column=1, sticky="ew", pady=4)
+        ttk.Button(
+            tab_plugins, text="Browse…", style="Browse.TButton",
+            command=lambda: plugin_var.set(filedialog.askopenfilename(filetypes=[("Python", "*.py")]) or plugin_var.get()),
+        ).grid(row=0, column=2, sticky="w", padx=(8, 0), pady=4)
+
+        ttk.Label(tab_plugins, text="Active Plugins", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        plugin_list_var = tk.StringVar(value="(none)")
+        ttk.Label(tab_plugins, textvariable=plugin_list_var, style="Value.TLabel").grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(tab_plugins, text="Save Preset", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        preset_save_var = tk.StringVar(value="")
+        ttk.Entry(tab_plugins, textvariable=preset_save_var).grid(row=2, column=1, sticky="ew", pady=4)
+
+        def save_preset() -> None:
+            name = preset_save_var.get().strip()
+            if not name:
+                return
+            from cmd_audio.favorites import save_favorite, FavoritePreset
+            snapshot = state.snapshot()
+            preset = FavoritePreset(
+                name=name,
+                theme=snapshot.theme_name,
+                sensitivity=snapshot.sensitivity,
+                fps=30,
+                ui_style=snapshot.ui_style,
+                banner_text=snapshot.banner_text,
+            )
+            save_favorite(preset)
+        ttk.Button(tab_plugins, text="Save", style="Accent.TButton", command=save_preset).grid(row=2, column=2, sticky="w", padx=(8, 0), pady=4)
+
+        ttk.Label(tab_plugins, text="Load Preset", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        preset_load_var = tk.StringVar(value="")
+        ttk.Entry(tab_plugins, textvariable=preset_load_var).grid(row=3, column=1, sticky="ew", pady=4)
+
+        def load_preset() -> None:
+            name = preset_load_var.get().strip()
+            if not name:
+                return
+            try:
+                from cmd_audio.favorites import load_favorite
+                preset = load_favorite(name)
+                state.set_theme(preset.theme)
+                state.set_sensitivity(preset.sensitivity)
+            except Exception:
+                pass
+        ttk.Button(tab_plugins, text="Load", style="Accent.TButton", command=load_preset).grid(row=3, column=2, sticky="w", padx=(8, 0), pady=4)
+
+        # ── Tab: Scene & Storyboard ────────────────────────────────
+        tab_scene = ttk.Frame(notebook, padding=12)
+        notebook.add(tab_scene, text="  Scene  ")
+        tab_scene.columnconfigure(1, weight=1)
+
+        ttk.Label(tab_scene, text="Scene Pack", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        scene_pack_var = tk.StringVar(value="")
+        ttk.Combobox(tab_scene, textvariable=scene_pack_var, values=["default", "hacknet", "cyberpunk", "neon"], state="readonly").grid(row=0, column=1, sticky="ew", pady=4)
+
+        ttk.Label(tab_scene, text="Storyboard Mode", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        storyboard_var = tk.StringVar(value="off")
+        ttk.Combobox(tab_scene, textvariable=storyboard_var, values=["off", "auto", "manual"], state="readonly").grid(row=1, column=1, sticky="ew", pady=4)
+
+        ttk.Label(tab_scene, text="Layered Rendering", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        layered_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(tab_scene, text="Enable Layered Panels", variable=layered_var).grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(tab_scene, text="Adaptive FPS", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        adaptive_fps_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(tab_scene, text="Enable Adaptive FPS", variable=adaptive_fps_var).grid(row=3, column=1, sticky="w", pady=4)
+
+        # ── Tab: Accessibility ─────────────────────────────────────
+        tab_acc = ttk.Frame(notebook, padding=12)
+        notebook.add(tab_acc, text="  Access  ")
+        tab_acc.columnconfigure(1, weight=1)
+
+        ttk.Label(tab_acc, text="Accessibility Mode", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        acc_var = tk.StringVar(value="off")
+        ttk.Combobox(tab_acc, textvariable=acc_var, values=["off", "high-contrast", "screen-reader", "high-contrast+reader"], state="readonly").grid(row=0, column=1, sticky="ew", pady=4)
+
+        ttk.Label(tab_acc, text="Screen Reader", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        reader_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(tab_acc, text="Enable Screen Reader Descriptions", variable=reader_var).grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(tab_acc, text="Collaborative Mode", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        collab_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(tab_acc, text="Enable Collaborative Session", variable=collab_var).grid(row=2, column=1, sticky="w", pady=4)
+
         # ── Bottom bar ─────────────────────────────────────────────
         sep2 = tk.Frame(root, height=1, bg="#30363d")
         sep2.pack(fill="x", padx=20, pady=(0, 0))
