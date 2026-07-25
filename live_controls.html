@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CMD-AUDIO  //  Live Controls</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #1c2128;
+  --fg: #c9d1d9;
+  --fg2: #8b949e;
+  --accent: #00ff9f;
+  --accent2: #00cc7f;
+  --border: #30363d;
+  --btn: #238636;
+  --btn2: #2ea043;
+  --stop: #da3633;
+  --stop2: #f85149;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 20px 30px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 { color: var(--accent); font-size: 28px; margin-bottom: 2px; }
+.sub { color: var(--fg2); font-size: 12px; margin-bottom: 12px; }
+.accent-line { height: 2px; background: var(--accent); margin-bottom: 16px; border-radius: 1px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--border); margin-bottom: 0; flex-wrap: wrap; }
+.tab {
+  padding: 8px 16px;
+  background: var(--bg2);
+  color: var(--fg2);
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px 6px 0 0;
+  transition: all .15s;
+}
+.tab:hover { background: var(--bg3); color: var(--fg); }
+.tab.active { background: var(--bg3); color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+.panel {
+  display: none;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.panel.active { display: block; }
+
+/* Fields */
+.field { display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; margin-bottom: 8px; }
+.field label { color: var(--fg); font-size: 12px; font-weight: 600; }
+.field input, .field select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  width: 100%;
+}
+.field input:focus, .field select:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent2);
+}
+.field select { cursor: pointer; }
+
+/* Checkboxes */
+.checkbox-row { display: flex; flex-wrap: wrap; gap: 16px; margin: 8px 0; }
+.checkbox-row label { display: flex; align-items: center; gap: 6px; color: var(--fg); font-size: 12px; cursor: pointer; }
+.checkbox-row input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+
+/* Sliders */
+.field input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  border: none;
+  padding: 0;
+}
+.field input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.field input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+.slider-label { font-size: 11px; color: var(--accent); min-width: 50px; text-align: right; }
+
+/* Buttons */
+.btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.btn {
+  padding: 10px 28px;
+  border: none;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-start { background: var(--btn); color: #fff; }
+.btn-start:hover { background: var(--btn2); }
+.btn-stop { background: var(--stop); color: #fff; }
+.btn-stop:hover { background: var(--stop2); }
+.btn-browse { background: var(--bg3); color: var(--accent); border: 1px solid var(--border); font-size: 12px; padding: 6px 14px; }
+.btn-browse:hover { background: #1a2332; color: #fff; }
+
+/* Status */
+.status-bar {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--fg2);
+}
+.status-bar .live { color: var(--accent); font-weight: 700; }
+.status-bar .warn { color: #f0ad4e; font-weight: 600; }
+
+/* Misc */
+.section-divider { height: 1px; background: var(--border); margin: 12px 0; }
+</style>
+</head>
+<body>
+
+<h1>CMD-AUDIO</h1>
+<div class="sub">Live control panel — changes apply instantly</div>
+<div class="accent-line"></div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-panel="playback">Playback</button>
+  <button class="tab" data-panel="visual">Visual</button>
+  <button class="tab" data-panel="terminal">Terminal</button>
+  <button class="tab" data-panel="banner">Banner</button>
+  <button class="tab" data-panel="music">Music</button>
+  <button class="tab" data-panel="features">Features</button>
+  <button class="tab" data-panel="streaming">Streaming</button>
+  <button class="tab" data-panel="plugins">Plugins</button>
+  <button class="tab" data-panel="scene">Scene</button>
+  <button class="tab" data-panel="access">Access</button>
+</div>
+
+<!-- Playback -->
+<div class="panel active" id="playback">
+  <div class="field">
+    <label>Sensitivity</label>
+    <input type="range" id="sensitivity" min="0.1" max="4.0" step="0.05" value="1.0">
+    <span class="slider-label" id="sensitivity_val">1.00</span>
+  </div>
+  <div class="field">
+    <label>Speed Min</label>
+    <input type="range" id="speed_min" min="0.05" max="3.0" step="0.05" value="0.25">
+    <span class="slider-label" id="speed_min_val">0.25</span>
+  </div>
+  <div class="field">
+    <label>Speed Max</label>
+    <input type="range" id="speed_max" min="0.5" max="6.0" step="0.1" value="3.0">
+    <span class="slider-label" id="speed_max_val">3.00</span>
+  </div>
+  <div class="field">
+    <label>Switch Min (s)</label>
+    <input type="range" id="terminal_switch_min" min="0.5" max="20.0" step="0.5" value="4.0">
+    <span class="slider-label" id="terminal_switch_min_val">4.0</span>
+  </div>
+  <div class="field">
+    <label>Switch Max (s)</label>
+    <input type="range" id="terminal_switch_max" min="1.0" max="60.0" step="0.5" value="11.0">
+    <span class="slider-label" id="terminal_switch_max_val">11.0</span>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="paused"> Pause</label>
+  </div>
+  <div class="field">
+    <label>Frame Drops</label>
+    <span class="slider-label" id="frame_drops_val" style="text-align:left">0</span>
+  </div>
+</div>
+
+<!-- Visual -->
+<div class="panel" id="visual">
+  <div class="field">
+    <label>Theme</label>
+    <select id="theme">
+      <option value="matrix">matrix</option>
+      <option value="red-alert">red-alert</option>
+      <option value="ice">ice</option>
+      <option value="amber">amber</option>
+      <option value="neon">neon</option>
+      <option value="plasma">plasma</option>
+      <option value="ghost">ghost</option>
+      <option value="magma">magma</option>
+      <option value="storm">storm</option>
+      <option value="twilight">twilight</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Theme Mode</label>
+    <select id="theme_mode">
+      <option value="manual">manual</option>
+      <option value="bass">bass</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Scene Sync</label>
+    <select id="scene_sync">
+      <option value="adaptive">adaptive</option>
+      <option value="bpm">bpm</option>
+      <option value="hybrid">hybrid</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>UI Style</label>
+    <select id="ui_style">
+      <option value="full">full</option>
+      <option value="minimal">minimal</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Quality</label>
+    <select id="quality_mode">
+      <option value="auto">auto</option>
+      <option value="off">off</option>
+    </select>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="unicode_bars"> Unicode Bars</label>
+  </div>
+</div>
+
+<!-- Terminal -->
+<div class="panel" id="terminal">
+  <div class="field">
+    <label>Terminal Profile</label>
+    <select id="terminal_mode">
+      <option value="netrunner">netrunner</option>
+      <option value="hacker">hacker</option>
+      <option value="sysadmin">sysadmin</option>
+      <option value="retro">retro</option>
+      <option value="cyberpunk">cyberpunk</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Operation Mode</label>
+    <select id="operation_mode">
+      <option value="RECON">RECON</option>
+      <option value="EXPLOIT">EXPLOIT</option>
+      <option value="EXFIL">EXFIL</option>
+      <option value="DEFEND">DEFEND</option>
+      <option value="OBSERVE">OBSERVE</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Target Lock</label>
+    <select id="target_lock">
+      <option value="JUPITER-7">JUPITER-7</option>
+      <option value="DARKNODE-3">DARKNODE-3</option>
+      <option value="PHANTOM-19">PHANTOM-19</option>
+      <option value="ORACLE-42">ORACLE-42</option>
+      <option value="CIPHER-99">CIPHER-99</option>
+    </select>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="lock_scene"> Lock Scene</label>
+  </div>
+</div>
+
+<!-- Banner -->
+<div class="panel" id="banner">
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="show_banner"> Show Banner</label>
+  </div>
+  <div class="field">
+    <label>Banner Text</label>
+    <input type="text" id="banner_text" placeholder="Enter banner text...">
+  </div>
+  <div class="field">
+    <label>Banner Align</label>
+    <select id="banner_align">
+      <option value="left">left</option>
+      <option value="center">center</option>
+      <option value="right">right</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Banner Animation</label>
+    <select id="banner_anim">
+      <option value="off">off</option>
+      <option value="scroll">scroll</option>
+      <option value="pulse">pulse</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Banner Size</label>
+    <select id="banner_size">
+      <option value="normal">normal</option>
+      <option value="large">large</option>
+    </select>
+  </div>
+</div>
+
+<!-- Music -->
+<div class="panel" id="music">
+  <div class="field">
+    <label>Current Music</label>
+    <span class="slider-label" id="music_current_val" style="text-align:left">(none)</span>
+  </div>
+  <div class="field">
+    <label>New Music File</label>
+    <input type="text" id="music_choice" placeholder="Enter file path...">
+  </div>
+  <div class="checkbox-row" style="margin-top: 8px">
+    <button class="btn btn-browse" onclick="browseMusicFile()">Browse...</button>
+    <button class="btn btn-start" onclick="loadMusicFile()">Load Music</button>
+  </div>
+  <div class="field" style="margin-top: 12px;">
+    <label>YouTube URL</label>
+    <input type="text" id="youtube_url" placeholder="https://youtube.com/watch?v=...">
+  </div>
+  <div class="checkbox-row" style="margin-top: 8px">
+    <button class="btn btn-start" onclick="loadYouTube()">Load YouTube</button>
+  </div>
+  <div class="field" style="margin-top: 12px;">
+    <label>Music Status</label>
+    <span class="slider-label" id="music_status_val" style="text-align:left">-</span>
+  </div>
+</div>
+
+<!-- Features -->
+<div class="panel" id="features">
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="alert_tones"> Alert Tones</label>
+    <label><input type="checkbox" id="mission_timeline"> Mission Timeline</label>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="defender_ai"> Defender AI</label>
+    <label><input type="checkbox" id="audio_fx"> Audio FX</label>
+  </div>
+</div>
+
+<!-- Streaming -->
+<div class="panel" id="streaming">
+  <div class="field">
+    <label>Streaming Mode</label>
+    <select id="stream_mode">
+      <option value="file">file</option>
+      <option value="mic">mic</option>
+      <option value="system">system</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Sample Rate</label>
+    <select id="sample_rate">
+      <option value="22050">22050</option>
+      <option value="44100">44100</option>
+      <option value="48000">48000</option>
+    </select>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="normalize"> Enable Volume Normalization</label>
+    <label><input type="checkbox" id="web_enable"> Enable Web Server</label>
+  </div>
+  <div class="field">
+    <label>Web Port</label>
+    <select id="web_port">
+      <option value="8080">8080</option>
+      <option value="8081">8081</option>
+      <option value="8082">8082</option>
+    </select>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="remote_enable"> Enable Remote Socket</label>
+  </div>
+  <div class="field">
+    <label>Remote Port</label>
+    <select id="remote_port">
+      <option value="9998">9998</option>
+      <option value="9999">9999</option>
+      <option value="10000">10000</option>
+    </select>
+  </div>
+</div>
+
+<!-- Plugins -->
+<div class="panel" id="plugins">
+  <div class="field">
+    <label>Load Plugin</label>
+    <input type="text" id="plugin_path" placeholder="Path to plugin .py file...">
+  </div>
+  <div class="checkbox-row" style="margin-top: 4px">
+    <button class="btn btn-browse" onclick="browsePlugin()">Browse...</button>
+  </div>
+  <div class="field" style="margin-top: 12px;">
+    <label>Active Plugins</label>
+    <span class="slider-label" id="plugin_list_val" style="text-align:left">(none)</span>
+  </div>
+  <div class="section-divider"></div>
+  <div class="field">
+    <label>Save Preset</label>
+    <input type="text" id="preset_save_name" placeholder="Preset name...">
+  </div>
+  <div class="checkbox-row" style="margin-top: 4px">
+    <button class="btn btn-start" onclick="savePreset()">Save</button>
+  </div>
+  <div class="field" style="margin-top: 12px;">
+    <label>Load Preset</label>
+    <input type="text" id="preset_load_name" placeholder="Preset name...">
+  </div>
+  <div class="checkbox-row" style="margin-top: 4px">
+    <button class="btn btn-start" onclick="loadPreset()">Load</button>
+  </div>
+</div>
+
+<!-- Scene -->
+<div class="panel" id="scene">
+  <div class="field">
+    <label>Scene Pack</label>
+    <select id="scene_pack">
+      <option value="default">default</option>
+      <option value="hacknet">hacknet</option>
+      <option value="cyberpunk">cyberpunk</option>
+      <option value="neon">neon</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Storyboard Mode</label>
+    <select id="storyboard">
+      <option value="off">off</option>
+      <option value="auto">auto</option>
+      <option value="manual">manual</option>
+    </select>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="layered_panels"> Enable Layered Panels</label>
+    <label><input type="checkbox" id="adaptive_fps" checked> Enable Adaptive FPS</label>
+  </div>
+</div>
+
+<!-- Access -->
+<div class="panel" id="access">
+  <div class="field">
+    <label>Accessibility Mode</label>
+    <select id="acc_mode">
+      <option value="off">off</option>
+      <option value="high-contrast">high-contrast</option>
+      <option value="screen-reader">screen-reader</option>
+      <option value="high-contrast+reader">high-contrast+reader</option>
+    </select>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="screen_reader"> Enable Screen Reader Descriptions</label>
+  </div>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="collab"> Enable Collaborative Session</label>
+  </div>
+</div>
+
+<!-- Bottom bar -->
+<div class="btn-row">
+  <button class="btn btn-stop" onclick="stopConsole()">Stop Console</button>
+  <button class="btn btn-start" onclick="closeWindow()">Close Window</button>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar" id="status-bar">
+  <span class="live">●</span> Live Controls — Open this file in a browser to manage CMD-AUDIO settings.
+</div>
+
+<script>
+// Tab switching
+document.querySelectorAll('.tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.panel).classList.add('active');
+  });
+});
+
+// Slider value display
+document.querySelectorAll('input[type=range]').forEach(function(slider) {
+  var valEl = document.getElementById(slider.id + '_val');
+  if (valEl) {
+    slider.addEventListener('input', function() {
+      valEl.textContent = parseFloat(slider.value).toFixed(2);
+    });
+  }
+});
+
+// Mock functions showing this is a standalone file
+function browseMusicFile() {
+  alert('Music file browser: Use a web server with backend for file selection.');
+}
+
+function browsePlugin() {
+  alert('Plugin browser: Use a web server with backend for file selection.');
+}
+
+function loadMusicFile() {
+  var path = document.getElementById('music_choice').value.trim();
+  if (!path) {
+    document.getElementById('music_status_val').textContent = 'Enter a file path first';
+    return;
+  }
+  document.getElementById('music_status_val').textContent = 'Loading requested...';
+}
+
+function loadYouTube() {
+  var url = document.getElementById('youtube_url').value.trim();
+  if (!url) {
+    document.getElementById('music_status_val').textContent = 'Enter a YouTube URL first';
+    return;
+  }
+  if (url.indexOf('youtube.com') === -1 && url.indexOf('youtu.be') === -1) {
+    document.getElementById('music_status_val').textContent = 'Invalid YouTube URL';
+    return;
+  }
+  document.getElementById('music_status_val').textContent = 'Downloading YouTube audio...';
+}
+
+function savePreset() {
+  var name = document.getElementById('preset_save_name').value.trim();
+  if (!name) return;
+  alert('Preset "' + name + '" saved (requires web server backend).');
+}
+
+function loadPreset() {
+  var name = document.getElementById('preset_load_name').value.trim();
+  if (!name) return;
+  alert('Preset "' + name + '" loaded (requires web server backend).');
+}
+
+function stopConsole() {
+  if (confirm('Are you sure you want to stop the console?')) {
+    alert('Stop signal sent (requires web server backend).');
+  }
+}
+
+function closeWindow() {
+  window.close();
+}
+
+// Load saved state from localStorage
+(function loadState() {
+  try {
+    var saved = localStorage.getItem('cmd-audio-live-controls');
+    if (saved) {
+      var state = JSON.parse(saved);
+      Object.keys(state).forEach(function(key) {
+        var el = document.getElementById(key);
+        if (!el) return;
+        if (el.type === 'checkbox') {
+          el.checked = !!state[key];
+        } else {
+          el.value = state[key];
+        }
+        var valEl = document.getElementById(key + '_val');
+        if (valEl && el.type === 'range') {
+          valEl.textContent = parseFloat(el.value).toFixed(2);
+        }
+      });
+    }
+  } catch(e) {}
+})();
+
+// Save state on changes
+document.querySelectorAll('input, select').forEach(function(el) {
+  el.addEventListener('change', function() {
+    try {
+      var state = {};
+      document.querySelectorAll('input, select').forEach(function(inp) {
+        if (inp.type === 'checkbox') {
+          state[inp.id] = inp.checked;
+        } else {
+          state[inp.id] = inp.value;
+        }
+      });
+      localStorage.setItem('cmd-audio-live-controls', JSON.stringify(state));
+    } catch(e) {}
+  });
+});
+</script>
+</body>
+</html>

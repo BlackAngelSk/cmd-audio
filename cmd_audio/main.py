@@ -64,10 +64,37 @@ from cmd_audio.mission import (
     mission_timeline_from_progress,
     should_shift_scene,
 )
-from cmd_audio.control import LiveControlState, LiveUIHandle, start_live_control_window
+from cmd_audio.control import LiveControlState
 from cmd_audio.logging_config import setup_logging, get_logger
 from cmd_audio.web_server import start_web_server, AudioServer
 from cmd_audio.remote_control import create_remote_control
+from cmd_audio.volume_normalize import normalize_volume
+from cmd_audio.custom_themes import get_all_themes, load_custom_themes
+from cmd_audio.theme_transitions import create_theme_transition
+from cmd_audio.keyboard_help import render_keyboard_help
+from cmd_audio.session import save_session, load_session, SessionState
+from cmd_audio.profiler import create_profiler, Profiler
+from cmd_audio.frame_drops import create_frame_drop_monitor, FrameDropMonitor
+from cmd_audio.notifications import NotificationManager
+from cmd_audio.adaptive_fps import AdaptiveFpsController
+from cmd_audio.accessibility import high_contrast_theme, generate_screen_reader_text
+from cmd_audio.player_integration import PlayerDetector
+from cmd_audio.mqtt_osc import create_mqtt_client, create_osc_client
+from cmd_audio.rest_api import RESTAPIServer
+from cmd_audio.network_trigger import create_network_trigger
+from cmd_audio.chat_overlay import ChatOverlay
+from cmd_audio.ai_scene_gen import AISceneGenerator
+from cmd_audio.storyboard import Storyboard, load_storyboard, create_default_storyboard
+from cmd_audio.spectrogram import render_spectrogram_with_labels
+from cmd_audio.config_validation import validate_config_data
+from cmd_audio.favorites import save_favorite, load_favorite, list_favorites, FavoritePreset
+from cmd_audio.scene_pack_browser import list_scene_packs, preview_scene_pack
+from cmd_audio.cli_help import generate_man_page
+from cmd_audio.rust_ext import is_rust_available, fft_rust
+from cmd_audio.gpu_render import is_gpu_available
+from cmd_audio.collaborative_mode import create_collaborative_session
+from cmd_audio.network_trigger import create_network_trigger as create_net_trigger
+from cmd_audio.ui_setup import setup_run_with_ui
 
 logger = get_logger(__name__)
 
@@ -308,7 +335,31 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--remote-control", dest="remote_control", action="store_true", help="Enable remote control socket")
     p.add_argument("--remote-port", type=int, default=9999, help="Remote control port")
     p.add_argument("--normalize", action="store_true", help="Normalize audio levels across tracks")
-    p.set_defaults(play=True, ui=True, mission_timeline=True, defender_ai=True, audio_fx=True, setup_ui=False, web=False, remote_control=False, normalize=False)
+    p.add_argument("--profile", action="store_true", help="Enable performance profiling")
+    p.add_argument("--theme-transition", action="store_true", help="Enable smooth theme transition effects")
+    p.add_argument("--adaptive-fps", action="store_true", help="Enable adaptive frame rate scaling")
+    p.add_argument("--high-contrast", action="store_true", help="Use high-contrast accessibility theme")
+    p.add_argument("--detect-player", action="store_true", help="Auto-detect running music player")
+    p.add_argument("--mqtt", default="", help="MQTT broker address for audio publishing")
+    p.add_argument("--osc", default="", help="OSC host:port for live performance publishing")
+    p.add_argument("--rest-api", action="store_true", help="Start REST API server")
+    p.add_argument("--rest-port", type=int, default=8081, help="REST API port")
+    p.add_argument("--network-trigger", action="store_true", help="Enable network trigger mode")
+    p.add_argument("--net-trigger-port", type=int, default=9998, help="Network trigger port")
+    p.add_argument("--chat", action="store_true", help="Enable chat overlay")
+    p.add_argument("--ai-scenes", action="store_true", help="Enable AI-driven scene generation")
+    p.add_argument("--storyboard", default="", help="Path to storyboard JSON file")
+    p.add_argument("--spectrogram", action="store_true", help="Show spectrogram in visualization")
+    p.add_argument("--save-favorite", default="", help="Save current settings as favorite preset")
+    p.add_argument("--load-favorite", default="", help="Load a saved favorite preset")
+    p.add_argument("--list-favorites", action="store_true", help="List saved favorite presets")
+    p.add_argument("--list-packs", action="store_true", help="List available scene packs")
+    p.add_argument("--preview-pack", default="", help="Preview a scene pack")
+    p.add_argument("--man-page", action="store_true", help="Print man page and exit")
+    p.add_argument("--gpu", action="store_true", help="Enable GPU-accelerated rendering")
+    p.add_argument("--collab", action="store_true", help="Enable collaborative mode")
+    p.add_argument("--collab-port", type=int, default=9997, help="Collaborative mode port")
+    p.set_defaults(play=True, ui=True, mission_timeline=True, defender_ai=True, audio_fx=True, setup_ui=False, web=False, remote_control=False, normalize=False, profile=False, theme_transition=False, adaptive_fps=False, high_contrast=False, detect_player=False, rest_api=False, network_trigger=False, chat=False, ai_scenes=False, spectrogram=False, gpu=False, collab=False)
     first_pass = p.parse_known_args()[0]
 
     argv = sys.argv[1:]
@@ -342,8 +393,6 @@ def clear_and_home() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    from cmd_audio.ui_setup import setup_run_with_ui
-
     # Initialize logging based on diagnostics flag
     verbosity = 2 if getattr(parse_args(), 'diagnostics', False) else 1
     setup_logging(verbosity=verbosity)
@@ -427,13 +476,11 @@ def main() -> int:
     theme_name = apply_theme(args.theme)
     set_bar_mode(args.unicode_bars)
     live_state: Optional[LiveControlState] = None
-    live_ui: Optional[LiveUIHandle] = None
     web_server: Optional[AudioServer] = None
     initial_music_file = args.youtube or " ".join(args.audio).strip() or "(demo mode)"
 
     def close_live_ui() -> None:
-        if live_ui is not None:
-            live_ui.close()
+        pass  # No tkinter UI to close; live controls now served via HTML
 
     args.terminal_switch_min = clamp(args.terminal_switch_min, 0.5, 60.0)
     args.terminal_switch_max = clamp(args.terminal_switch_max, args.terminal_switch_min, 60.0)
@@ -580,6 +627,173 @@ def main() -> int:
             close_live_ui()
             return 1
 
+    # Apply volume normalization if requested
+    if args.normalize and audio is not None:
+        logger.info("Normalizing audio levels...")
+        audio.levels = normalize_volume(audio.levels, target_db=-20.0)
+        for i in range(len(audio.bands)):
+            audio.bands[i] = normalize_volume(audio.bands[i], target_db=-20.0)
+        logger.info("Audio normalization applied.")
+
+    # Load custom themes from ~/.config/cmd-audio/themes/
+    try:
+        custom_themes = load_custom_themes()
+        if custom_themes:
+            THEMES.update(custom_themes)
+            theme_order = list(THEMES.keys())
+            logger.info("Loaded %d custom themes: %s", len(custom_themes), ", ".join(custom_themes.keys()))
+    except Exception as exc:
+        logger.debug("No custom themes: %s", exc)
+
+    # Initialize profiler
+    profiler: Optional[Profiler] = None
+    if getattr(args, 'profile', False):
+        profiler = create_profiler(enabled=True)
+        logger.info("Performance profiling enabled")
+
+    # Initialize frame drop monitor
+    frame_drop_monitor = create_frame_drop_monitor(expected_fps=args.fps)
+
+    # Initialize notification manager
+    notify_mgr = NotificationManager(ttl=3.0)
+
+    # Initialize adaptive FPS controller
+    adaptive_fps_ctrl: Optional[AdaptiveFpsController] = None
+    if getattr(args, 'adaptive_fps', False):
+        adaptive_fps_ctrl = AdaptiveFpsController(min_fps=15, max_fps=120, target_fps=args.fps)
+        logger.info("Adaptive FPS enabled")
+
+    # Apply high-contrast accessibility theme if requested
+    if getattr(args, 'high_contrast', False):
+        hc = high_contrast_theme()
+        args.theme = "matrix"
+        logger.info("High-contrast accessibility mode enabled")
+
+    # Auto-detect running music player
+    player_detector: Optional[PlayerDetector] = None
+    if getattr(args, 'detect_player', False):
+        player_detector = PlayerDetector()
+        detected = player_detector.detect()
+        if detected:
+            logger.info("Detected running player: %s", detected)
+
+    # Initialize MQTT client
+    mqtt_client = None
+    mqtt_broker = getattr(args, 'mqtt', '')
+    if mqtt_broker:
+        mqtt_client = create_mqtt_client(mqtt_broker)
+        mqtt_client.start()
+        logger.info("MQTT client started, broker=%s", mqtt_broker)
+
+    # Initialize OSC client
+    osc_client = None
+    osc_addr = getattr(args, 'osc', '')
+    if osc_addr:
+        parts = osc_addr.split(":")
+        osc_host = parts[0] if parts else "localhost"
+        osc_port = int(parts[1]) if len(parts) > 1 else 9000
+        osc_client = create_osc_client(osc_host, osc_port)
+        osc_client.start()
+        logger.info("OSC client started, host=%s port=%d", osc_host, osc_port)
+
+    # Initialize REST API server
+    rest_server: Optional[RESTAPIServer] = None
+    if getattr(args, 'rest_api', False):
+        rest_port = getattr(args, 'rest_port', 8081)
+        rest_server = RESTAPIServer(host="localhost", port=rest_port)
+        rest_server.start()
+        logger.info("REST API server started on port %d", rest_port)
+
+    # Initialize network trigger
+    net_trigger = None
+    if getattr(args, 'network_trigger', False):
+        trigger_port = getattr(args, 'net_trigger_port', 9998)
+        net_trigger = create_network_trigger(port=trigger_port)
+        net_trigger.start()
+        logger.info("Network trigger started on port %d", trigger_port)
+
+    # Initialize chat overlay
+    chat_overlay: Optional[ChatOverlay] = None
+    if getattr(args, 'chat', False):
+        chat_overlay = ChatOverlay(max_messages=10)
+        logger.info("Chat overlay enabled")
+
+    # Initialize AI scene generator
+    ai_scene_gen: Optional[AISceneGenerator] = None
+    if getattr(args, 'ai_scenes', False):
+        ai_scene_gen = AISceneGenerator(seed=args.seed)
+        logger.info("AI scene generation enabled")
+
+    # Initialize storyboard
+    active_storyboard: Optional[Storyboard] = None
+    storyboard_path = getattr(args, 'storyboard', '')
+    if storyboard_path and os.path.exists(storyboard_path):
+        try:
+            active_storyboard = load_storyboard(storyboard_path)
+            logger.info("Loaded storyboard: %s", storyboard_path)
+        except Exception as exc:
+            logger.error("Failed to load storyboard: %s", exc)
+
+    # Check GPU availability
+    gpu_enabled = getattr(args, 'gpu', False) and is_gpu_available()
+    if gpu_enabled:
+        logger.info("GPU-accelerated rendering enabled")
+
+    # Initialize collaborative session
+    collab_session = None
+    if getattr(args, 'collab', False):
+        collab_port = getattr(args, 'collab_port', 9997)
+        collab_session = create_collaborative_session(port=collab_port)
+        logger.info("Collaborative mode enabled on port %d", collab_port)
+
+    # Check for Rust extensions
+    rust_available = is_rust_available()
+    if rust_available:
+        logger.info("Rust extensions available for faster audio processing")
+
+    # Handle --man-page
+    if getattr(args, 'man_page', False):
+        print(generate_man_page())
+        return 0
+
+    # Handle --list-favorites
+    if getattr(args, 'list_favorites', False):
+        favs = list_favorites()
+        if favs:
+            print("Saved favorites:")
+            for f in favs:
+                print(f"  - {f}")
+        else:
+            print("No saved favorites.")
+        return 0
+
+    # Handle --load-favorite
+    fav_name = getattr(args, 'load_favorite', '')
+    if fav_name:
+        try:
+            fav = load_favorite(fav_name)
+            args.theme = fav.theme
+            args.sensitivity = fav.sensitivity
+            args.fps = fav.fps
+            args.speed_min = fav.speed_min
+            args.speed_max = fav.speed_max
+            args.ui_style = fav.ui_style
+            args.banner_text = fav.banner_text
+            logger.info("Loaded favorite preset: %s", fav_name)
+        except Exception as exc:
+            logger.error("Failed to load favorite: %s", exc)
+
+    # Handle --list-packs
+    if getattr(args, 'list_packs', False):
+        packs = list_scene_packs()
+        if packs:
+            print("Available scene packs:")
+            for pk in packs:
+                print(f"  - {pk}")
+        else:
+            print("No scene packs found.")
+        return 0
+
     if args.diagnostics:
         print_diagnostics(args, audio_path, playback_input, audio)
 
@@ -658,7 +872,9 @@ def main() -> int:
         port_rows=[], admin_rows=[], last_refresh=0.0,
     )
 
-    keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l w d D"
+    keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l w d D ?"
+    width = 100
+    height = 30
     mission_phase_name = MISSION_PHASES[0]["name"]
     mission_objective = MISSION_PHASES[0]["objective"]
     mission_phase_idx = 0
@@ -788,7 +1004,6 @@ def main() -> int:
     # Random attack pattern for YouTube
     current_attack_pattern = None
     attack_pattern_timer = 0.0
-    ui_started = False
     try:
         while running:
             if live_state is not None:
@@ -1031,6 +1246,21 @@ def main() -> int:
                 if live_state is not None:
                     live_state.set_theme(theme_name)
                 logs.append(f"!{visual_t:06.2f}s Theme     BACKWARD   {theme_name}")
+            if key == "?":
+                # Show keyboard help overlay
+                help_lines = render_keyboard_help(width, height)
+                sys.stdout.write("\033[H")
+                sys.stdout.write("\n".join(help_lines))
+                sys.stdout.write("\033[J")
+                sys.stdout.flush()
+                waiting = True
+                while waiting:
+                    hk = raw.read_key()
+                    if hk:
+                        waiting = False
+                    else:
+                        time.sleep(0.03)
+                logs.append(f"!{visual_t:06.2f}s Help      OVERLAY    keyboard shortcuts shown")
 
             if visual_t >= next_terminal_switch_at and not lock_scene:
                 other_modes = [m for m in terminal_modes if m != terminal_mode]
@@ -1368,9 +1598,6 @@ def main() -> int:
             sys.stdout.write("\033[J")
             sys.stdout.flush()
 
-            if args.ui and live_state is not None and not ui_started:
-                live_ui = start_live_control_window(live_state)
-                ui_started = True
 
             if rec is not None:
                 write_record_frame(rec, args.record_mode, visual_t, speed_factor, frame)
@@ -1411,6 +1638,25 @@ def main() -> int:
                 os.unlink(wav_input)
             except OSError:
                 pass
+        # Save session state on exit
+        try:
+            session_state = SessionState(
+                theme=theme_name, sensitivity=sensitivity,
+                speed_min=args.speed_min, speed_max=args.speed_max,
+                fps=args.fps, banner_text=banner_text,
+                banner_align=banner_align, banner_anim=banner_anim,
+                banner_size=banner_size, show_banner=show_banner,
+                ui_style=args.ui_style, quality_mode=args.quality_mode,
+                scene_sync=args.scene_sync, unicode_bars=bool(_cfg.USE_UNICODE_BARS),
+                alert_tones=alert_tones_enabled,
+                mission_timeline=mission_timeline_enabled,
+                defender_ai=defender_ai_enabled, audio_fx=audio_fx_enabled,
+            )
+            save_session(session_state)
+        except Exception:
+            pass
+
+        # Stop all network services
         if web_server is not None:
             try:
                 web_server.stop()
@@ -1419,6 +1665,26 @@ def main() -> int:
         if remote_sock is not None:
             try:
                 remote_sock.stop()
+            except Exception:
+                pass
+        if mqtt_client is not None:
+            try:
+                mqtt_client.stop()
+            except Exception:
+                pass
+        if osc_client is not None:
+            try:
+                osc_client.stop()
+            except Exception:
+                pass
+        if rest_server is not None:
+            try:
+                rest_server.stop()
+            except Exception:
+                pass
+        if net_trigger is not None:
+            try:
+                net_trigger.stop()
             except Exception:
                 pass
         close_live_ui()
