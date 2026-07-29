@@ -50,9 +50,10 @@ def fft_rust(samples: Sequence[float], sample_rate: int) -> List[float]:
     """Perform FFT using Rust extension if available."""
     if HAS_RUST and rust_core is not None:
         return rust_core.fft(list(samples), sample_rate)
-    # Fallback to pure Python
-    from cmd_audio.audio import goertzel_power_matrix  # type: ignore[import-untyped]
-    return goertzel_power_matrix(list(samples), sample_rate)
+    # Fallback to pure Python — compute Goertzel power for each frequency band
+    from cmd_audio.config import FREQ_CENTERS
+    from cmd_audio.audio import goertzel_power
+    return [goertzel_power([int(s) for s in samples], sample_rate, f) for f in FREQ_CENTERS]
 
 
 def goertzel_rust(samples: Sequence[float], sample_rate: int, freq: float) -> float:

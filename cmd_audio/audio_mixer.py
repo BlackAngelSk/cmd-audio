@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any, List, Optional
 from cmd_audio.logging_config import get_logger
 

@@ -535,7 +535,16 @@ function loadMusicFile() {
     document.getElementById('music_status_val').textContent = 'Enter a file path first';
     return;
   }
-  document.getElementById('music_status_val').textContent = 'Loading requested...';
+  document.getElementById('music_status_val').textContent = 'Loading...';
+  fetch('/api/music', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: path})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    document.getElementById('music_status_val').textContent = d.status === 'ok' ? 'Load requested' : ('Error: ' + (d.message || 'unknown'));
+  }).catch(function(e) {
+    document.getElementById('music_status_val').textContent = 'Error: ' + e.message;
+  });
 }
 
 function loadYouTube() {
@@ -549,6 +558,15 @@ function loadYouTube() {
     return;
   }
   document.getElementById('music_status_val').textContent = 'Downloading YouTube audio...';
+  fetch('/api/music', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: url})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    document.getElementById('music_status_val').textContent = d.status === 'ok' ? 'YouTube download requested' : ('Error: ' + (d.message || 'unknown'));
+  }).catch(function(e) {
+    document.getElementById('music_status_val').textContent = 'Error: ' + e.message;
+  });
 }
 
 function savePreset() {

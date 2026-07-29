@@ -24,7 +24,6 @@ class VolumeNormalizer:
         if rms <= 0.0:
             return 1.0
         # Target RMS from dB
-        import math
         target_rms = 10 ** (self.target_rms_db / 20.0)
         gain = target_rms / rms
         gain = clamp(gain, 0.01, 100.0)

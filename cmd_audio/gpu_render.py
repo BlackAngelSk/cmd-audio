@@ -22,7 +22,7 @@ class WebGLRenderer:
     def __init__(self, width: int = 800, height: int = 600) -> None:
         self.width = width
         self.height = height
-        self笑着说 = False
+        self.enabled = False
         self.render_buffer: List[str] = []
 
     def send_frame(self, frame_data: Dict[str, Any]) -> None:

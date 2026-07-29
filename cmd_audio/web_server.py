@@ -26,6 +26,11 @@ class AudioServer:
         self.config_received: Optional[Dict[str, Any]] = None
         self.config_event = threading.Event()
         self.live_controls_html: str = ""
+        self.live_state: Any = None
+
+    def set_live_state(self, live_state: Any) -> None:
+        """Set the live control state for runtime music changes."""
+        self.live_state = live_state
 
     def start(self) -> None:
         self.running = True
@@ -90,6 +95,22 @@ class AudioServer:
                         server.config_received = config
                         server.config_event.set()
                         self._send_json({"status": "ok"})
+                    except Exception as e:
+                        self._send_json({"status": "error", "message": str(e)})
+                elif self.path == "/api/music":
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length)
+                    try:
+                        data = json.loads(body.decode())
+                        music_url = data.get("url", "").strip()
+                        if not music_url:
+                            self._send_json({"status": "error", "message": "No URL provided"})
+                            return
+                        if server.live_state is not None:
+                            server.live_state.request_music_change(music_url)
+                            self._send_json({"status": "ok", "message": "Music change requested"})
+                        else:
+                            self._send_json({"status": "error", "message": "Live state not available"})
                     except Exception as e:
                         self._send_json({"status": "error", "message": str(e)})
                 elif self.path == "/api/cancel":
@@ -219,6 +240,9 @@ h1{color:var(--accent);font-size:28px;margin-bottom:2px}
   <div class="field"><label>Preset</label><select id="preset"><option value="">(none)</option><option value="cinematic">cinematic</option><option value="chaos">chaos</option><option value="minimal">minimal</option></select></div>
   <div class="field"><label>Scene Sync</label><select id="scene_sync"><option value="adaptive">adaptive</option><option value="bpm">bpm</option><option value="hybrid">hybrid</option></select></div>
   <div class="field"><label>Quality</label><select id="quality_mode"><option value="auto">auto</option><option value="off">off</option></select></div>
+  <div class="field"><label>Theme Mode</label><select id="theme_mode"><option value="manual">manual</option><option value="bass">bass</option></select></div>
+  <div class="field"><label>Bass Threshold</label><input type="number" id="bass_threshold" value="0.15" min="0.01" max="1.0" step="0.01"></div>
+  <div class="field"><label>UI Style</label><select id="ui_style"><option value="full">full</option><option value="minimal">minimal</option></select></div>
   <div class="field"><label>Scene Pack</label><select id="scene_pack"><option value="">(none)</option></select></div>
   <div class="field"><label>Scene Pack File</label><input type="text" id="scene_pack_file" placeholder="/path/to/packs.json"></div>
 </div>
@@ -302,7 +326,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (c) {
       const fields = ['audio','source','youtube','playlist','capture_seconds','fps','sensitivity',
         'speed_min','speed_max','terminal_switch_min','terminal_switch_max','seed','theme',
-        'preset','scene_sync','quality_mode','banner_text','banner_align','banner_anim',
+        'preset','scene_sync','quality_mode','theme_mode','bass_threshold','ui_style',
+        'banner_text','banner_align','banner_anim',
         'banner_size','record_file','record_mode','plugin','video_hook','mqtt','osc','scene_pack','scene_pack_file'];
       fields.forEach(f => {
         const el = document.getElementById(f);
@@ -324,7 +349,8 @@ function collectConfig() {
   const cfg = {};
   const fields = ['audio','source','youtube','playlist','capture_seconds','fps','sensitivity',
     'speed_min','speed_max','terminal_switch_min','terminal_switch_max','theme',
-    'preset','scene_sync','quality_mode','banner_text','banner_align','banner_anim',
+    'preset','scene_sync','quality_mode','theme_mode','bass_threshold','ui_style',
+    'banner_text','banner_align','banner_anim',
     'banner_size','record_file','record_mode','plugin','video_hook','mqtt','osc','scene_pack','scene_pack_file'];
   fields.forEach(f => {
     const el = document.getElementById(f);
@@ -342,7 +368,7 @@ function collectConfig() {
   });
   // Convert numeric strings
   ['capture_seconds','fps'].forEach(f => { cfg[f] = parseInt(cfg[f]) || 30; });
-  ['sensitivity','speed_min','speed_max','terminal_switch_min','terminal_switch_max'].forEach(f => { cfg[f] = parseFloat(cfg[f]) || 1.0; });
+  ['sensitivity','speed_min','speed_max','terminal_switch_min','terminal_switch_max','bass_threshold'].forEach(f => { cfg[f] = parseFloat(cfg[f]) || 1.0; });
   return cfg;
 }
 

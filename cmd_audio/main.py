@@ -69,31 +69,27 @@ from cmd_audio.logging_config import setup_logging, get_logger
 from cmd_audio.web_server import start_web_server, AudioServer
 from cmd_audio.remote_control import create_remote_control
 from cmd_audio.volume_normalize import normalize_volume
-from cmd_audio.custom_themes import get_all_themes, load_custom_themes
-from cmd_audio.theme_transitions import create_theme_transition
+from cmd_audio.custom_themes import load_custom_themes
 from cmd_audio.keyboard_help import render_keyboard_help
-from cmd_audio.session import save_session, load_session, SessionState
+from cmd_audio.session import save_session, SessionState
 from cmd_audio.profiler import create_profiler, Profiler
-from cmd_audio.frame_drops import create_frame_drop_monitor, FrameDropMonitor
+from cmd_audio.frame_drops import create_frame_drop_monitor
 from cmd_audio.notifications import NotificationManager
 from cmd_audio.adaptive_fps import AdaptiveFpsController
-from cmd_audio.accessibility import high_contrast_theme, generate_screen_reader_text
+from cmd_audio.accessibility import high_contrast_theme
 from cmd_audio.player_integration import PlayerDetector
 from cmd_audio.mqtt_osc import create_mqtt_client, create_osc_client
 from cmd_audio.rest_api import RESTAPIServer
-from cmd_audio.network_trigger import create_network_trigger
 from cmd_audio.chat_overlay import ChatOverlay
 from cmd_audio.ai_scene_gen import AISceneGenerator
-from cmd_audio.storyboard import Storyboard, load_storyboard, create_default_storyboard
-from cmd_audio.spectrogram import render_spectrogram_with_labels
-from cmd_audio.config_validation import validate_config_data
-from cmd_audio.favorites import save_favorite, load_favorite, list_favorites, FavoritePreset
-from cmd_audio.scene_pack_browser import list_scene_packs, preview_scene_pack
+from cmd_audio.storyboard import Storyboard, load_storyboard
+from cmd_audio.favorites import load_favorite, list_favorites
+from cmd_audio.scene_pack_browser import list_scene_packs
 from cmd_audio.cli_help import generate_man_page
-from cmd_audio.rust_ext import is_rust_available, fft_rust
+from cmd_audio.rust_ext import is_rust_available
 from cmd_audio.gpu_render import is_gpu_available
 from cmd_audio.collaborative_mode import create_collaborative_session
-from cmd_audio.network_trigger import create_network_trigger as create_net_trigger
+from cmd_audio.network_trigger import create_network_trigger
 from cmd_audio.ui_setup import setup_run_with_ui
 
 logger = get_logger(__name__)
@@ -484,7 +480,7 @@ def main() -> int:
 
     args.terminal_switch_min = clamp(args.terminal_switch_min, 0.5, 60.0)
     args.terminal_switch_max = clamp(args.terminal_switch_max, args.terminal_switch_min, 60.0)
-    if args.ui:
+    if args.ui or args.web:
         live_state = LiveControlState(
             args.sensitivity, args.speed_min, args.speed_max,
             args.terminal_switch_min, args.terminal_switch_max,
@@ -499,6 +495,8 @@ def main() -> int:
     if args.web:
         try:
             web_server = start_web_server(host=args.web_host, port=args.web_port)
+            if live_state is not None:
+                web_server.set_live_state(live_state)
             logger.info("Web server started at http://%s:%d", args.web_host, args.web_port)
         except Exception as exc:
             logger.error("Failed to start web server: %s", exc)

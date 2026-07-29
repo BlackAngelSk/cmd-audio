@@ -22,7 +22,7 @@ def _apply_args_from_config(args: argparse.Namespace, config: Dict[str, Any]) ->
 
     # String fields
     for field in ("audio", "source", "youtube", "playlist", "scene_sync", "quality_mode",
-                   "ui_style", "theme", "preset", "banner_text", "banner_align",
+                   "ui_style", "theme", "theme_mode", "preset", "banner_text", "banner_align",
                    "banner_anim", "banner_size", "record_file", "record_mode",
                    "plugin", "video_hook", "scene_pack", "scene_pack_file", "mqtt", "osc"):
         val = config.get(field)
@@ -46,7 +46,7 @@ def _apply_args_from_config(args: argparse.Namespace, config: Dict[str, Any]) ->
 
     # Float fields
     for field in ("sensitivity", "speed_min", "speed_max",
-                   "terminal_switch_min", "terminal_switch_max"):
+                   "terminal_switch_min", "terminal_switch_max", "bass_threshold"):
         val = config.get(field)
         if val is not None:
             try:
@@ -93,6 +93,8 @@ def _build_config_dict(args: argparse.Namespace) -> Dict[str, Any]:
         "terminal_switch_max": getattr(args, "terminal_switch_max", 11.0),
         "seed": getattr(args, "seed", None),
         "theme": getattr(args, "theme", "matrix"),
+        "theme_mode": getattr(args, "theme_mode", "manual"),
+        "bass_threshold": getattr(args, "bass_threshold", 0.15),
         "preset": getattr(args, "preset", ""),
         "scene_sync": getattr(args, "scene_sync", "adaptive"),
         "quality_mode": getattr(args, "quality_mode", "auto"),
