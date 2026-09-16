@@ -34,10 +34,10 @@ from cmd_audio.config import (
     CURRENT_THEME_MODE,
     BASS_THRESHOLD,
 )
-from cmd_audio.utils import clamp, fit_text
+from cmd_audio.utils import clamp, fit_text, colorize_status
 from cmd_audio.terminal import RawInput
 from cmd_audio.audio import AudioFeatures, make_demo_audio_features, read_audio_features
-from cmd_audio.audio_input import prepare_audio_input, get_random_attack_pattern, is_youtube_url
+from cmd_audio.audio_input import prepare_audio_input, get_random_attack_pattern, is_youtube_url, get_last_youtube_title
 from cmd_audio.effects import (
     apply_terminal_fx,
     build_banner_lines,
@@ -390,19 +390,17 @@ def clear_and_home() -> None:
 
 def main() -> int:
     # Initialize logging based on diagnostics flag
-    verbosity = 2 if getattr(parse_args(), 'diagnostics', False) else 1
+    args = parse_args()
+    # Re-setup logging with correct verbosity after args parsing
+    verbosity = 2 if getattr(args, 'diagnostics', False) else 1
     setup_logging(verbosity=verbosity)
 
-    args = parse_args()
-
-    # Re-setup logging with correct verbosity after args parsing
-    setup_logging(verbosity=2 if args.diagnostics else 1)
-
+    setup_server: Optional[AudioServer] = None
     if args.setup_ui:
         # Automatically enable live controls when setup UI is used
         args.ui = True
-        started = setup_run_with_ui(args)
-        if not started:
+        setup_server = setup_run_with_ui(args)
+        if setup_server is None:
             return 0
 
     plugin_module: Any = None
@@ -480,16 +478,29 @@ def main() -> int:
 
     args.terminal_switch_min = clamp(args.terminal_switch_min, 0.5, 60.0)
     args.terminal_switch_max = clamp(args.terminal_switch_max, args.terminal_switch_min, 60.0)
-    if args.ui or args.web:
-        live_state = LiveControlState(
-            args.sensitivity, args.speed_min, args.speed_max,
-            args.terminal_switch_min, args.terminal_switch_max,
-            theme_name, args.theme_mode, args.banner_text, args.banner_align, args.banner_anim, args.banner_size,
-            bool(args.show_banner), args.ui_style, args.quality_mode, bool(args.unicode_bars),
-            args.scene_sync, bool(args.alert_tones), bool(args.mission_timeline),
-            bool(args.defender_ai), bool(args.audio_fx),
-            "netrunner", OPERATION_MODES[0], TARGETS[0], False, initial_music_file,
-        )
+    # Always create live_state so the browser-server handler (and any API
+    # consumers) can interact with the render loop regardless of --ui/--web.
+    live_state = LiveControlState(
+        args.sensitivity, args.speed_min, args.speed_max,
+        args.terminal_switch_min, args.terminal_switch_max,
+        theme_name, args.theme_mode, args.banner_text, args.banner_align, args.banner_anim, args.banner_size,
+        bool(args.show_banner), args.ui_style, args.quality_mode, bool(args.unicode_bars),
+        args.scene_sync, bool(args.alert_tones), bool(args.mission_timeline),
+        bool(args.defender_ai), bool(args.audio_fx),
+        "netrunner", OPERATION_MODES[0], TARGETS[0], False, initial_music_file,
+    )
+    # Publish to the browser-server handler (music_sync_hacker_effect.py)
+    try:
+        from cmd_audio.control import set_browser_live_state
+        set_browser_live_state(live_state)
+    except ImportError:
+        pass
+
+    # Keep setup UI server running for live controls
+    if setup_server is not None:
+        setup_server.set_live_state(live_state)
+        if web_server is None:
+            web_server = setup_server
 
     # Start web server if requested
     if args.web:
@@ -595,6 +606,9 @@ def main() -> int:
                 playlist_index = 0
                 audio_path = playlist_tracks[0]
 
+    # Re-compute initial_music_file based on resolved audio_path
+    if audio_path and audio_path != "(demo mode)":
+        initial_music_file = audio_path
     cleanup_wav = False
     wav_input = ""
     playback_input = ""
@@ -638,7 +652,6 @@ def main() -> int:
         custom_themes = load_custom_themes()
         if custom_themes:
             THEMES.update(custom_themes)
-            theme_order = list(THEMES.keys())
             logger.info("Loaded %d custom themes: %s", len(custom_themes), ", ".join(custom_themes.keys()))
     except Exception as exc:
         logger.debug("No custom themes: %s", exc)
@@ -650,7 +663,6 @@ def main() -> int:
         logger.info("Performance profiling enabled")
 
     # Initialize frame drop monitor
-    frame_drop_monitor = create_frame_drop_monitor(expected_fps=args.fps)
 
     # Initialize notification manager
     notify_mgr = NotificationManager(ttl=3.0)
@@ -663,7 +675,8 @@ def main() -> int:
 
     # Apply high-contrast accessibility theme if requested
     if getattr(args, 'high_contrast', False):
-        hc = high_contrast_theme()
+        hc_theme = high_contrast_theme()
+        THEMES.update(hc_theme)
         args.theme = "matrix"
         logger.info("High-contrast accessibility mode enabled")
 
@@ -918,7 +931,8 @@ def main() -> int:
         live_state.set_mission_timeline(mission_timeline_enabled)
         live_state.set_defender_ai(defender_ai_enabled)
         live_state.set_audio_fx(audio_fx_enabled)
-        live_state.set_music_file(audio_path)
+        yt_title = get_last_youtube_title()
+        live_state.set_music_file(yt_title or audio_path)
 
     def switch_music_file(new_music_path: str, preserve_session: bool = False) -> None:
         nonlocal audio, wav_input, playback_input, cleanup_wav, player
@@ -931,7 +945,6 @@ def main() -> int:
             return
         
         # Check if it's a YouTube URL
-        from cmd_audio.audio_input import is_youtube_url
         if not is_youtube_url(new_music) and not os.path.exists(new_music):
             raise RuntimeError("Selected music file does not exist")
 
@@ -978,7 +991,8 @@ def main() -> int:
             logs.append(f" {visual_t:06.2f}s Track     SWITCH   -> {os.path.basename(new_music)}")
 
         if live_state is not None:
-            live_state.set_music_file(new_music)
+            yt_title = get_last_youtube_title()
+            live_state.set_music_file(yt_title or new_music)
             live_state.set_music_status("Loaded successfully")
 
     def advance_playlist(step: int) -> bool:
@@ -1027,7 +1041,7 @@ def main() -> int:
                 if snap.theme_mode != theme_mode:
                     theme_mode = snap.theme_mode
                     set_theme_mode(theme_mode)
-                if snap.unicode_bars != (not _cfg.USE_UNICODE_BARS):
+                if snap.unicode_bars != _cfg.USE_UNICODE_BARS:
                     set_bar_mode(snap.unicode_bars)
                 if snap.terminal_mode in terminal_modes and snap.terminal_mode != terminal_mode:
                     terminal_mode = snap.terminal_mode
@@ -1046,7 +1060,6 @@ def main() -> int:
                 if pending_music:
                     try:
                         # Check if it's a YouTube URL
-                        from cmd_audio.audio_input import is_youtube_url
                         if is_youtube_url(pending_music):
                             # Generate random attack pattern for YouTube
                             current_attack_pattern = get_random_attack_pattern()
@@ -1273,7 +1286,7 @@ def main() -> int:
                 continue
 
             elapsed = time.perf_counter() - start
-            idx = min(int(elapsed * args.fps), len(audio.levels) - 1)
+            idx = min(int(elapsed * args.fps), max(0, len(audio.levels) - 1))
             base_level = audio.levels[idx]
             level = clamp(base_level * sensitivity, 0.0, 1.0)
             current_level = level
@@ -1400,6 +1413,7 @@ def main() -> int:
                 glitch_frames = 0
                 scanline_flash = 0
                 jitter = 0
+                current_attack_pattern = None
 
             if (not lock_scene) and should_shift_scene(args.scene_sync, beat, flux, visual_t, next_scene_shift_at, bpm_phase_hit):
                 target_lock = random.choice(TARGETS)
@@ -1419,8 +1433,7 @@ def main() -> int:
                 next_visual_module_switch_at = visual_t + random.uniform(3.0, 8.0)
                 # Also switch on beat with high flux
                 if beat and flux > 0.6:
-                    visual_module_cycle_idx += 1
-                    active_visual_modules = get_visual_modules_for_cycle(visual_module_cycle_idx)
+                    next_visual_module_switch_at = visual_t + random.uniform(1.0, 2.0)
 
             if beat or flux > 0.45 or visual_t >= next_shell_refresh_at:
                 shell_lines = generate_shell_feed(level, beat, terminal_mode)
@@ -1529,7 +1542,13 @@ def main() -> int:
 
             rows: List[str] = []
             # Extract music name for display
-            music_display_name = os.path.basename(audio_path) if audio_path and audio_path != "(demo mode)" else "DEMO"
+            yt_title = get_last_youtube_title()
+            if yt_title:
+                music_display_name = yt_title
+            elif audio_path and audio_path != "(demo mode)":
+                music_display_name = os.path.basename(audio_path)
+            else:
+                music_display_name = "DEMO"
             header = f"{_cfg.GREEN_BRIGHT}CMD-AUDIO :: MUSIC SYNC CONSOLE :: {operation_mode}{_cfg.RESET}"
             beat_word = f"{_cfg.GREEN_BRIGHT}BEAT{_cfg.RESET}" if pulse > 0 else f"{_cfg.GREEN_DARK}IDLE{_cfg.RESET}"
             top_rule = f"{_cfg.GREEN_DIM}{'=' * max(1, width)}{_cfg.RESET}"
@@ -1576,7 +1595,6 @@ def main() -> int:
 
             pulse_word = random.choice(["ACCESS", "OVERRIDE", "BYPASS", "DECRYPT", "INJECT", "TRACE"]) if pulse > 0 else "SYNC"
             footer_meter_w = max(10, width - 44)
-            from cmd_audio.utils import colorize_status
             footer_net = colorize_status(net_state, 0.92 if "COLLAPSE" in net_state else 0.20)
             footer = fit_text(
                 f"{_cfg.GREEN_BRIGHT}::{pulse_word:<8}::{_cfg.RESET} {meter_bar(level, footer_meter_w)}  flux:{int(flux * 100):3d}%  {footer_net}",

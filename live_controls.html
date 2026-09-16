@@ -630,6 +630,78 @@ document.querySelectorAll('input, select').forEach(function(el) {
     } catch(e) {}
   });
 });
+
+// Load current state from server
+(async function loadServerState() {
+  try {
+    var r = await fetch('/api/live-state');
+    var s = await r.json();
+    if (s && !s.error) {
+      // Apply server state to controls (overrides localStorage)
+      var fields = ['sensitivity','speed_min','speed_max','terminal_switch_min','terminal_switch_max','theme','theme_mode','scene_sync','ui_style','quality_mode','banner_text','banner_align','banner_anim','banner_size','terminal_mode','operation_mode','target_lock'];
+      fields.forEach(function(f) {
+        var el = document.getElementById(f);
+        if (el && s[f] !== undefined && s[f] !== null) el.value = s[f];
+        var valEl = document.getElementById(f + '_val');
+        if (valEl && el && el.type === 'range') valEl.textContent = parseFloat(el.value).toFixed(2);
+      });
+      var bools = ['show_banner','unicode_bars','lock_scene','alert_tones','mission_timeline','defender_ai','audio_fx','paused'];
+      bools.forEach(function(f) {
+        var el = document.getElementById(f);
+        if (el && s[f] !== undefined) el.checked = !!s[f];
+      });
+      if (s.music_file) {
+        var mc = document.getElementById('music_current_val');
+        if (mc) mc.textContent = s.music_file;
+      }
+    }
+  } catch(e) {}
+})();
+
+// Live settings sync - send changes to server
+function sendLiveSettings(patch) {
+  fetch('/api/live', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(patch)
+  }).catch(function(e) { console.warn('Live settings sync failed:', e); });
+}
+
+// Sliders: send on input (continuous)
+document.querySelectorAll('input[type=range]').forEach(function(el) {
+  el.addEventListener('input', function() {
+    var patch = {};
+    patch[el.id] = parseFloat(el.value);
+    sendLiveSettings(patch);
+  });
+});
+
+// Selects: send on change
+document.querySelectorAll('select').forEach(function(el) {
+  el.addEventListener('change', function() {
+    var patch = {};
+    patch[el.id] = el.value;
+    sendLiveSettings(patch);
+  });
+});
+
+// Checkboxes: send on change
+document.querySelectorAll('input[type=checkbox]').forEach(function(el) {
+  el.addEventListener('change', function() {
+    var patch = {};
+    patch[el.id] = el.checked;
+    sendLiveSettings(patch);
+  });
+});
+
+// Text inputs: send on change (not input, to avoid flooding)
+document.querySelectorAll('input[type=text]').forEach(function(el) {
+  el.addEventListener('change', function() {
+    var patch = {};
+    patch[el.id] = el.value;
+    sendLiveSettings(patch);
+  });
+});
 </script>
 </body>
 </html>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import struct
 import threading
 import queue
 from typing import Any, Callable, Dict, List, Optional
@@ -180,7 +181,8 @@ class AudioStreamAnalyzer:
             last_level = 0.0
             while self.running:
                 data = stream.read(self.config.chunk_size, exception_on_overflow=False)
-                samples = [float(b / 32768.0) for b in data if isinstance(b, int)]
+                samples = [float(struct.unpack_from('<h', data, i)[0]) / 32768.0
+                           for i in range(0, len(data) - 1, 2)]
                 level = _rms(samples)
                 bands = [_goertzel(samples, self.config.sample_rate, f) for f in FREQ_CENTERS]
                 flux = max(0.0, level - last_level)

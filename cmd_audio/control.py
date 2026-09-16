@@ -251,8 +251,7 @@ class LiveControlState:
     def set_target_lock(self, target_lock: str) -> None:
         with self._lock:
             cleaned = target_lock.strip()
-            if cleaned in TARGETS:
-                self._target_lock = cleaned
+            self._target_lock = cleaned if cleaned in TARGETS else TARGETS[0]
 
     def set_lock_scene(self, lock_scene: bool) -> None:
         with self._lock:
@@ -308,5 +307,26 @@ class LiveUIHandle:
         self.stop_event.set()
         if self.thread.is_alive():
             self.thread.join(timeout=timeout)
+
+
+# ---------------------------------------------------------------------------
+# Browser-server live-state bridge
+# ---------------------------------------------------------------------------
+# The standalone HTTP server in music_sync_hacker_effect.py (port 8765) starts
+# *before* main() creates LiveControlState.  This holder lets main() publish
+# the reference so the browser handler can use it for /api/* requests.
+
+_browser_live_state: Optional["LiveControlState"] = None
+
+
+def set_browser_live_state(state: "LiveControlState") -> None:
+    """Called by main() once LiveControlState has been created."""
+    global _browser_live_state
+    _browser_live_state = state
+
+
+def get_browser_live_state() -> Optional["LiveControlState"]:
+    """Used by the browser-server handler to access the shared state."""
+    return _browser_live_state
 
 

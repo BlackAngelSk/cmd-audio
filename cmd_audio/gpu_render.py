@@ -7,8 +7,6 @@ from cmd_audio.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-HAS_WEBGL = False
-
 try:
     import websocket  # type: ignore[import-untyped]
     HAS_WEBSOCKET = True

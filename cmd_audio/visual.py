@@ -92,7 +92,6 @@ def render_buffer_overflow(
 
     # Stack diagram
     stack_h = min(height - 4, 8)
-    rows_used = 0
     stack_diagram = state.buffer_overflow_stack if state and state.buffer_overflow_stack else []
     for i in range(stack_h):
         if i < len(stack_diagram):
@@ -113,7 +112,6 @@ def render_buffer_overflow(
                 ret_addr = f"0x{random.randint(0x08040000, 0x0804FFFF):08x}"
                 marker = f" {_cfg.STATUS_CRIT}<<< SHELLCODE!{_cfg.RESET}" if beat else ""
                 lines.append(fit_text(f"    RET ADDR = {ret_addr}{marker}", width))
-            rows_used += 1
 
     if beat:
         payload = random.choice(_cfg.SHELLCODE_PAYLOADS)
@@ -283,10 +281,8 @@ def render_radar_sweep(
     module_level: Optional[float] = None,
 ) -> List[str]:
     """Render a circular radar sweep visualization."""
-    from cmd_audio.utils import clamp as _clamp
-
     lines: List[str] = []
-    activity = _clamp(module_level if module_level is not None else level, 0.0, 1.0)
+    activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
     bar_w = max(8, width - 18)
 
     # Radar circle
@@ -357,10 +353,8 @@ def render_particle_storm(
 ) -> List[str]:
     """Render an ASCII particle system / fireworks reacting to audio.
     Uses only single-width ASCII characters to avoid terminal alignment issues."""
-    from cmd_audio.utils import clamp as _clamp
-
     lines: List[str] = []
-    activity = _clamp(module_level if module_level is not None else level, 0.0, 1.0)
+    activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
 
     grid: List[List[str]] = [[" "] * width for _ in range(height)]
 
@@ -844,10 +838,8 @@ def render_aurora(
     module_level: Optional[float] = None,
 ) -> List[str]:
     """Render an animated aurora borealis effect using ANSI colors."""
-    from cmd_audio.utils import clamp as _clamp
-
     lines: List[str] = []
-    activity = _clamp(module_level if module_level is not None else level, 0.0, 1.0)
+    activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
 
     grid: List[List[str]] = [[" "] * width for _ in range(height)]
 
@@ -1011,10 +1003,8 @@ def render_digital_glitch(
     module_level: Optional[float] = None,
 ) -> List[str]:
     """Render a digital data-corruption / screen-tearing glitch effect."""
-    from cmd_audio.utils import clamp as _clamp
-
     lines: List[str] = []
-    activity = _clamp(module_level if module_level is not None else level, 0.0, 1.0)
+    activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
     bar_w = max(8, width - 18)
 
     corrupt_type = random.choice(_cfg.GLITCH_CORRUPTION_TYPES)
@@ -1145,7 +1135,7 @@ def render_whois_scan(
             elif i == 2:
                 line = f"  Creation: {creation}  Expiry: {expiry}"
             elif i == 3:
-                nameservers = f"ns1.{domain.replace('.', '.')}  ns2.{domain.replace('.', '.')}"
+                nameservers = f"ns1.{domain}  ns2.{domain}"
                 line = f"  Name Servers: {nameservers}"
             elif i == 4:
                 statuses = random.choice(["clientTransferProhibited", "clientDeleteProhibited", "addPeriod", "ok", "inactive"])
@@ -1261,7 +1251,7 @@ def render_network_nodes(
         link_w = max(6, min(16, width // 6))
         link_fill = int(activity * link_w)
         connection = f"[{('=' * link_fill):<{link_w}}>]"
-        line = f"{node:12} {port:4}  {status:8}  {connection}"
+        line = f"{node:12} {port:4}  {status}  {connection}"
         lines.append(fit_text(line, width))
     lines.append(fit_text(f"Link load  {meter_bar(activity, max(8, width - 24))}", width))
     breach_ratio = sum(1 for _, _, b in rows[:node_count] if b) / max(1, node_count) if rows else 0.0
@@ -1537,7 +1527,7 @@ def render_system_log(
     activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
 
     rows = state.syslog_lines if state is not None and state.syslog_lines else []
-    line_count = min(height, max(3, height))
+    line_count = height
     for i in range(line_count):
         if i < len(rows):
             lines.append(fit_text(rows[i], width))
@@ -1875,88 +1865,6 @@ def build_shell_feed(shell_lines: List[str], width: int, max_lines: int) -> List
 # Visual mode renderers
 # ---------------------------------------------------------------------------
 
-def render_visual_mode(
-    mode: str,
-    level: float,
-    beat: bool,
-    bands: List[float],
-    history: List[float],
-    shell_lines: List[str],
-    width: int,
-    height: int,
-    quality_scale: float,
-) -> List[str]:
-    """Render current Hacknet visual mode."""
-    if mode == "nodes":
-        return render_network_nodes(level, beat, width, height)
-    elif mode == "files":
-        return render_file_transfer(level, width, height)
-    elif mode == "firewall":
-        return render_firewall_status(level, beat, width, height)
-    elif mode == "crypto":
-        return render_encryption_crack(level, width, height)
-    elif mode == "ports":
-        return render_port_scan(level, beat, width, height)
-    elif mode == "admin":
-        return render_admin_alerts(level, beat, width, height)
-    elif mode == "processes":
-        return render_process_monitor(level, beat, width, height)
-    elif mode == "traffic":
-        return render_network_traffic(level, beat, width, height)
-    elif mode == "syslog":
-        return render_system_log(level, beat, width, height)
-    elif mode == "filesystem":
-        return render_filesystem(level, beat, width, height)
-    elif mode == "ssh-brute":
-        return render_ssh_bruteforce(level, beat, width, height)
-    elif mode == "dns":
-        return render_dns_enum(level, beat, width, height)
-    elif mode == "db-dump":
-        return render_db_dump(level, beat, width, height)
-    elif mode == "memory":
-        return render_memory_analysis(level, beat, width, height)
-    elif mode == "buffer-overflow":
-        return render_buffer_overflow(level, beat, width, height)
-    elif mode == "geo-trace":
-        return render_geo_trace(level, beat, width, height)
-    elif mode == "vhs-glitch":
-        return render_vhs_glitch(level, beat, width, height)
-    elif mode == "radar-sweep":
-        return render_radar_sweep(level, beat, width, height)
-    elif mode == "particle-storm":
-        return render_particle_storm(level, beat, width, height)
-    elif mode == "payload":
-        return render_payload_builder(level, beat, width, height)
-    elif mode == "sql-injection":
-        return render_sql_injection(level, beat, width, height)
-    elif mode == "vpn-tunnel":
-        return render_vpn_tunnel(level, beat, width, height)
-    elif mode == "docker-k8s":
-        return render_docker_k8s(level, beat, width, height)
-    elif mode == "iot-botnet":
-        return render_iot_botnet(level, beat, width, height)
-    elif mode == "packet-craft":
-        return render_packet_craft(level, beat, width, height)
-    elif mode == "stego-detect":
-        return render_stego_detect(level, beat, width, height)
-    elif mode == "crack-map":
-        return render_crack_map(level, beat, width, height)
-    elif mode == "aurora":
-        return render_aurora(level, beat, width, height)
-    elif mode == "bios-poste":
-        return render_bios_poste(level, beat, width, height)
-    elif mode == "morse-code":
-        return render_morse_code(level, beat, width, height)
-    elif mode == "whois-scan":
-        return render_whois_scan(level, beat, width, height)
-    elif mode == "cert-scrape":
-        return render_cert_scrape(level, beat, width, height)
-    elif mode == "digital-glitch":
-        return render_digital_glitch(level, beat, width, height)
-    else:
-        return build_spectrum_lines(bands, width, height, history, shell_lines, quality_scale)
-
-
 # All available visual module names for cycling
 ALL_VISUAL_MODULES = [
     "nodes", "files", "firewall", "ports", "crypto", "admin",
@@ -2086,6 +1994,7 @@ def render_paneled_visuals(
         active_modules = DEFAULT_VISUAL_MODULES
 
     # Ensure we always return exactly 4 panels
+    active_modules = list(active_modules)  # copy to avoid mutating caller's list
     while len(active_modules) < 4:
         active_modules.append(active_modules[-1] if active_modules else "nodes")
 

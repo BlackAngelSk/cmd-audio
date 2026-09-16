@@ -21,9 +21,8 @@ class ThemeTransition:
         if self.current_frame >= self.frames:
             return self.to_theme
         progress = self.current_frame / self.frames
-        if progress >= 0.5:
-            return self.to_theme
-        return self.from_theme
+        # Binary switch at 50% (ANSI colors cannot be interpolated)
+        return self.to_theme if progress >= 0.5 else self.from_theme
 
     def advance_frame(self) -> bool:
         if self.current_frame < self.frames:

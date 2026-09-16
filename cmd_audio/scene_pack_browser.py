@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import pickle
 import json
 from typing import Dict, List, Optional
 from cmd_audio.logging_config import get_logger

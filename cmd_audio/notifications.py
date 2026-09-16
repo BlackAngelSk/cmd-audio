@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
-from cmd_audio.utils import fit_text
-from cmd_audio.config import GREEN_BRIGHT, GREEN_DIM, RESET
+import cmd_audio.config as _cfg
 
 
 @dataclass
@@ -58,10 +57,10 @@ class NotificationManager:
             progress = elapsed / n.ttl if n.ttl > 0 else 1.0
             bar_w = max(0, int((1.0 - progress) * width))
             bar = "█" * bar_w + "░" * (width - bar_w)
-            color = GREEN_BRIGHT if n.level == "info" else ("\033[91m" if n.level == "error" else "\033[33m")
+            color = _cfg.GREEN_BRIGHT if n.level == "info" else (_cfg.STATUS_CRIT if n.level == "error" else _cfg.STATUS_WARN)
             icon = "●" if n.level == "info" else ("!" if n.level == "warn" else "✗")
-            lines.append(f"{color}  {icon} {n.message}{RESET}")
-            lines.append(f"{GREEN_DIM}  {bar}{RESET}")
+            lines.append(f"{color}  {icon} {n.message}{_cfg.RESET}")
+            lines.append(f"{_cfg.GREEN_DIM}  {bar}{_cfg.RESET}")
         return lines
 
     def clear(self) -> None:

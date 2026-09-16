@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import List, Tuple
-from cmd_audio.config import RESET, GREEN_BRIGHT, GREEN_DIM
+import cmd_audio.config as _cfg
 from cmd_audio.effects import panel_box
 from cmd_audio.utils import fit_text
 
@@ -47,15 +47,15 @@ SHORTCUTS: List[Tuple[str, str]] = [
 def render_keyboard_help(width: int, height: int) -> List[str]:
     """Render the keyboard shortcuts overlay."""
     lines: List[str] = []
-    lines.append(f"{GREEN_BRIGHT}{'=' * width}{RESET}")
-    lines.append(f"{GREEN_BRIGHT}  KEYBOARD SHORTCUTS{RESET}")
-    lines.append(f"{GREEN_BRIGHT}{'=' * width}{RESET}")
+    lines.append(f"{_cfg.GREEN_BRIGHT}{'=' * width}{_cfg.RESET}")
+    lines.append(f"{_cfg.GREEN_BRIGHT}  KEYBOARD SHORTCUTS{_cfg.RESET}")
+    lines.append(f"{_cfg.GREEN_BRIGHT}{'=' * width}{_cfg.RESET}")
     line_w = max(10, width - 4)
     for key, desc in SHORTCUTS:
         line = f"  [{key:>2}] {desc}"
         lines.append(fit_text(line, line_w))
-    lines.append(f"{GREEN_BRIGHT}{'=' * width}{RESET}")
-    lines.append(f"{GREEN_DIM}Press any key to dismiss.{RESET}")
+    lines.append(f"{_cfg.GREEN_BRIGHT}{'=' * width}{_cfg.RESET}")
+    lines.append(f"{_cfg.GREEN_DIM}Press any key to dismiss.{_cfg.RESET}")
     while len(lines) < height:
         lines.insert(len(lines) - 1, "")
     return lines[:height]

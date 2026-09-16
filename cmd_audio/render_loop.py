@@ -4,50 +4,10 @@ from __future__ import annotations
 
 import random
 import sys
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
-from cmd_audio.config import (
-    MISSION_PHASES,
-    OPERATION_MODES,
-    SCENE_PACKS,
-    TARGETS,
-    TERMINAL_PROFILES,
-    THEMES,
-    apply_theme,
-    set_bar_mode,
-    set_theme_mode,
-    set_bass_threshold,
-    CURRENT_THEME_MODE,
-    BASS_THRESHOLD,
-)
-from cmd_audio.utils import clamp
-from cmd_audio.terminal import RawInput
-from cmd_audio.audio import AudioFeatures, make_demo_audio_features
-from cmd_audio.effects import (
-    build_banner_lines,
-    meter_bar,
-    make_log_line,
-    make_incident_line,
-    panel_box,
-    prompt_banner_text,
-)
-from cmd_audio.visual import (
-    VisualState,
-    ALL_VISUAL_MODULES,
-    build_telemetry_lines,
-    compose_center_panel,
-    generate_shell_feed,
-    get_visual_modules_for_cycle,
-    refresh_visual_state,
-    render_paneled_visuals,
-)
-from cmd_audio.mission import (
-    IncidentFeedState,
-    maybe_apply_defender_countermeasure,
-    mission_timeline_from_progress,
-    should_shift_scene,
-)
+from cmd_audio.audio import AudioFeatures
+from cmd_audio.effects import meter_bar
 
 
 class RenderLoop:

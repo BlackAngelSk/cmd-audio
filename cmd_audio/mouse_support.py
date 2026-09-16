@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import sys
 import os
-import termios
-import tty
 from typing import Optional, Tuple, Callable
 from cmd_audio.logging_config import get_logger
 

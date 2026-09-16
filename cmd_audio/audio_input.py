@@ -12,6 +12,14 @@ from cmd_audio.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Stores the last downloaded YouTube video title for display
+_last_youtube_title: str = ""
+
+
+def get_last_youtube_title() -> str:
+    """Return the title of the last downloaded YouTube video."""
+    return _last_youtube_title
+
 
 def ensure_wav_input(audio_path: str, keep_converted: bool = False) -> Tuple[str, bool]:
     """Convert non-WAV input to WAV via ffmpeg. Returns (path, needs_cleanup)."""
@@ -89,6 +97,7 @@ def is_youtube_url(url: str) -> bool:
 
 def _download_youtube_via_module(url: str, tmp_mp3_path: str, tmp_wav: str) -> str:
     """Download YouTube audio using the yt_dlp Python module (pip-installed)."""
+    global _last_youtube_title
     import yt_dlp  # type: ignore[import-not-found]
 
     ydl_opts = {
@@ -108,6 +117,14 @@ def _download_youtube_via_module(url: str, tmp_mp3_path: str, tmp_wav: str) -> s
 
     logger.info("Downloading audio from: %s", url)
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
+        # Extract info first to get the video title
+        try:
+            info = ydl.extract_info(url, download=False)
+            if info and info.get("title"):
+                _last_youtube_title = info["title"]
+        except Exception:
+            pass
+
         try:
             ydl.download([url])
         except Exception as e:
@@ -150,12 +167,22 @@ def _download_youtube_via_module(url: str, tmp_mp3_path: str, tmp_wav: str) -> s
 
 def _download_youtube_via_cli(url: str, tmp_wav: str) -> str:
     """Download YouTube audio using the yt-dlp CLI command (system-installed)."""
+    global _last_youtube_title
     # Use a temporary MP3 path for the CLI download
     tmp_mp3 = tempfile.NamedTemporaryFile(prefix="hacker_youtube_cli_", suffix=".mp3", delete=False)
     tmp_mp3_path = tmp_mp3.name
     tmp_mp3.close()
 
     try:
+        # Extract title first
+        try:
+            title_cmd = ["yt-dlp", "--print", "title", "-q", url]
+            result = subprocess.run(title_cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode == 0 and result.stdout.strip():
+                _last_youtube_title = result.stdout.strip()
+        except Exception:
+            pass
+
         logger.info("Downloading audio from: %s (via yt-dlp CLI)", url)
 
         # yt-dlp CLI: download best audio, extract as mp3

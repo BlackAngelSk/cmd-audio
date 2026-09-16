@@ -10,6 +10,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from cmd_audio.logging_config import get_logger
+from cmd_audio.web_server import AudioServer
 
 __all__ = ["setup_run_with_ui"]
 
@@ -135,10 +136,10 @@ def _build_config_dict(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
-def setup_run_with_ui(args: argparse.Namespace) -> bool:
+def setup_run_with_ui(args: argparse.Namespace) -> Optional[AudioServer]:
     """Start a web server with an HTML settings page; blocks until user submits or cancels.
 
-    Returns True if the user clicked Start, False if cancelled or error.
+    Returns the AudioServer on success (kept running for live controls), None if cancelled.
     """
     from cmd_audio.web_server import AudioServer
 
@@ -163,7 +164,7 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
         server.start()
     except Exception as exc:
         logger.error("Failed to start setup web server: %s", exc)
-        return False
+        return None
 
     url = f"http://{host}:{port}"
     print(f"\n  CMD-AUDIO Setup UI: {url}\n")
@@ -179,21 +180,24 @@ def setup_run_with_ui(args: argparse.Namespace) -> bool:
     # Block until user submits the form or cancels
     config = server.wait_for_config(timeout=600.0)
 
-    # Stop the web server
-    try:
-        server.stop()
-    except Exception:
-        pass
-
     if config is None:
         logger.info("Setup UI cancelled by user")
-        return False
+        try:
+            server.stop()
+        except Exception:
+            pass
+        return None
 
     # Apply the received config to args
     try:
         _apply_args_from_config(args, config)
         logger.info("Setup UI: config applied successfully")
-        return True
+        # Keep server running for live controls during render loop
+        return server
     except Exception as exc:
         logger.error("Failed to apply config from UI: %s", exc)
-        return False
+        try:
+            server.stop()
+        except Exception:
+            pass
+        return None

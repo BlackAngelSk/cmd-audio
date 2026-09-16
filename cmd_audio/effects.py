@@ -136,8 +136,6 @@ def build_banner_line(text: str, width: int, align: str, anim: str, t: float, pu
     base = (text.strip() or "CMD-AUDIO ACTIVE")[:240]
     if anim == "scroll":
         padded = f"   {base}   "
-        if not padded:
-            return fit_text("", width)
         offset = int(t * 8.0) % len(padded)
         track = padded + padded
         return fit_text(track[offset: offset + width], width)

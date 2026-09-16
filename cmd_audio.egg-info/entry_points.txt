@@ -1,0 +1,2 @@
+[console_scripts]
+cmd-audio = cmd_audio.__main__:main

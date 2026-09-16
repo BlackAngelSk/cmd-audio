@@ -8,6 +8,7 @@ import threading
 from typing import Any, Dict, List, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from cmd_audio.logging_config import get_logger
+from cmd_audio.config import THEMES as _THEMES
 
 logger = get_logger(__name__)
 
@@ -83,6 +84,11 @@ class AudioServer:
                     self._send_json(server.current_config)
                 elif self.path == "/api/audio":
                     self._send_json(server.audio_data)
+                elif self.path == "/api/live-state":
+                    if server.live_state is not None:
+                        self._send_json(server.live_state.snapshot().__dict__)
+                    else:
+                        self._send_json({"error": "Live state not available"})
                 else:
                     self.send_error(404)
 
@@ -111,6 +117,71 @@ class AudioServer:
                             self._send_json({"status": "ok", "message": "Music change requested"})
                         else:
                             self._send_json({"status": "error", "message": "Live state not available"})
+                    except Exception as e:
+                        self._send_json({"status": "error", "message": str(e)})
+                elif self.path == "/api/live":
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length)
+                    try:
+                        data = json.loads(body.decode())
+                        if server.live_state is None:
+                            self._send_json({"status": "error", "message": "Live state not available"})
+                            return
+                        ls = server.live_state
+                        # Apply each setting if present
+                        if "sensitivity" in data:
+                            ls.set_sensitivity(float(data["sensitivity"]))
+                        if "speed_min" in data or "speed_max" in data:
+                            ls.set_speed_bounds(
+                                float(data.get("speed_min", 0.25)),
+                                float(data.get("speed_max", 3.0))
+                            )
+                        if "terminal_switch_min" in data or "terminal_switch_max" in data:
+                            ls.set_terminal_switch_bounds(
+                                float(data.get("terminal_switch_min", 4.0)),
+                                float(data.get("terminal_switch_max", 11.0))
+                            )
+                        if "theme" in data:
+                            ls.set_theme(str(data["theme"]))
+                        if "theme_mode" in data:
+                            ls.set_theme_mode(str(data["theme_mode"]))
+                        if "banner_text" in data:
+                            ls.set_banner_text(str(data["banner_text"]))
+                        if "banner_align" in data:
+                            ls.set_banner_align(str(data["banner_align"]))
+                        if "banner_anim" in data:
+                            ls.set_banner_anim(str(data["banner_anim"]))
+                        if "banner_size" in data:
+                            ls.set_banner_size(str(data["banner_size"]))
+                        if "show_banner" in data:
+                            ls.set_show_banner(bool(data["show_banner"]))
+                        if "ui_style" in data:
+                            ls.set_ui_style(str(data["ui_style"]))
+                        if "quality_mode" in data:
+                            ls.set_quality_mode(str(data["quality_mode"]))
+                        if "unicode_bars" in data:
+                            ls.set_unicode_bars(bool(data["unicode_bars"]))
+                        if "scene_sync" in data:
+                            ls.set_scene_sync(str(data["scene_sync"]))
+                        if "terminal_mode" in data:
+                            ls.set_terminal_mode(str(data["terminal_mode"]))
+                        if "operation_mode" in data:
+                            ls.set_operation_mode(str(data["operation_mode"]))
+                        if "target_lock" in data:
+                            ls.set_target_lock(str(data["target_lock"]))
+                        if "lock_scene" in data:
+                            ls.set_lock_scene(bool(data["lock_scene"]))
+                        if "alert_tones" in data:
+                            ls.set_alert_tones(bool(data["alert_tones"]))
+                        if "mission_timeline" in data:
+                            ls.set_mission_timeline(bool(data["mission_timeline"]))
+                        if "defender_ai" in data:
+                            ls.set_defender_ai(bool(data["defender_ai"]))
+                        if "audio_fx" in data:
+                            ls.set_audio_fx(bool(data["audio_fx"]))
+                        if "paused" in data:
+                            ls.set_paused(bool(data["paused"]))
+                        self._send_json({"status": "ok"})
                     except Exception as e:
                         self._send_json({"status": "error", "message": str(e)})
                 elif self.path == "/api/cancel":
@@ -155,6 +226,11 @@ def is_web_server_available() -> bool:
 # ---------------------------------------------------------------------------
 # HTML Settings Page
 # ---------------------------------------------------------------------------
+
+_theme_options_html = "\n".join(
+    f"    <option value=\"{name}\">{name}</option>"
+    for name in _THEMES
+)
 
 SETTINGS_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -232,10 +308,7 @@ h1{color:var(--accent);font-size:28px;margin-bottom:2px}
 <!-- Visual & Theme -->
 <div class="panel" id="visual">
   <div class="field"><label>Theme</label><select id="theme">
-    <option value="matrix">matrix</option><option value="red-alert">red-alert</option><option value="ice">ice</option>
-    <option value="amber">amber</option><option value="neon">neon</option><option value="plasma">plasma</option>
-    <option value="ghost">ghost</option><option value="magma">magma</option><option value="storm">storm</option>
-    <option value="twilight">twilight</option>
+{{THEME_OPTIONS}}
   </select></div>
   <div class="field"><label>Preset</label><select id="preset"><option value="">(none)</option><option value="cinematic">cinematic</option><option value="chaos">chaos</option><option value="minimal">minimal</option></select></div>
   <div class="field"><label>Scene Sync</label><select id="scene_sync"><option value="adaptive">adaptive</option><option value="bpm">bpm</option><option value="hybrid">hybrid</option></select></div>
@@ -382,7 +455,8 @@ async function startRun() {
     const r = await fetch('/api/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
     const d = await r.json();
     if (d.status === 'ok') {
-      document.body.innerHTML = '<div style="text-align:center;padding:80px;color:#00ff9f;font-family:monospace"><h2>Starting CMD-AUDIO...</h2><p style="color:#8b949e">You can close this tab.</p></div>';
+      document.body.innerHTML = '<div style="text-align:center;padding:80px;color:#00ff9f;font-family:monospace"><h2>Starting CMD-AUDIO...</h2><p style="color:#8b949e">Redirecting to live controls...</p></div>';
+      setTimeout(function() { window.location.href = '/live-controls'; }, 1500);
     } else {
       alert('Error: ' + (d.message || 'Unknown error'));
     }
@@ -398,3 +472,5 @@ async function cancelRun() {
 </script>
 </body>
 </html>"""
+
+SETTINGS_HTML = SETTINGS_HTML.replace("{{THEME_OPTIONS}}", _theme_options_html)

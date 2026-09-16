@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import List
 
@@ -138,6 +139,3 @@ def random_ipv4() -> str:
     import random
     return ".".join(str(random.randint(10, 250)) for _ in range(4))
 
-
-# math is needed by normalize()
-import math  # noqa: E402  (placed at end to avoid circular confusion)

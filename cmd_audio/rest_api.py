@@ -47,6 +47,7 @@ class RESTAPIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result).encode())
         except Exception as exc:
             self.send_response(500)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(exc)}).encode())
     

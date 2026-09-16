@@ -62,6 +62,8 @@ def render_spectrogram_with_colors(bands: List[List[float]], width: int, height:
     """Render a 2D heatmap with ANSI color codes."""
     if not bands:
         return ["" for _ in range(height)]
+    if not bands[0]:
+        return ["" for _ in range(height)]
     
     rows: List[str] = []
     for y in range(height):
@@ -112,11 +114,11 @@ def render_spectrogram_with_labels(bands: List[List[float]], width: int, height:
     height_actual = len(rows)
     if height_actual < 2:
         return rows
-    band_count = len(bands[0]) if bands else 1
+    band_count = len(bands[0]) if bands and bands[0] else 1
     step = max(1, height_actual // band_count)
     for i in range(band_count):
         row_idx = i * step
         if row_idx < height_actual:
             label = freq_band_label(i, band_count, width)
-            rows[row_idx] = f"{label:6} {rows[row_idx]}"
+            rows[row_idx] = f"{label} {rows[row_idx]}"
     return rows

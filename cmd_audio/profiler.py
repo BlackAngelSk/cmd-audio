@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+from typing import Any
 from cmd_audio.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -68,14 +69,14 @@ class Profiler:
         self.stats.frame_times.append(elapsed)
         self.stats.total_frames += 1
 
-    def track_render(self, func) -> None:
+    def track_render(self, func) -> Any:
         start = time.perf_counter()
         result = func()
         elapsed = time.perf_counter() - start
         self.stats.render_times.append(elapsed)
         return result
 
-    def track_audio(self, func) -> None:
+    def track_audio(self, func) -> Any:
         start = time.perf_counter()
         result = func()
         elapsed = time.perf_counter() - start
