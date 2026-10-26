@@ -77,10 +77,12 @@ Run using microphone/system capture:
 
 ## Browser controls
 
-Serve the live-controls panel alongside the render:
+The controls panel is served by default when you use the launcher:
 
 ```bash
-./start.sh /path/to/song.mp3 --web --web-port 8080
+./start.sh /path/to/song.mp3            # renders + serves controls on :8080
+./start.sh /path/to/song.mp3 --no-web   # terminal only
+./start.sh /path/to/song.mp3 --web-port 9000
 ```
 
 The app prints the URL it is serving and the panel is at `/` (so
