@@ -146,7 +146,7 @@ DNS_SUBDOMAINS = [
     "docker", "k8s", "kube", "ns1", "ns2", "mx", "mx1", "mx2",
     "autodiscover", "autoconfig", "remote", "desktop", "backup", "monitor",
     "nagios", "zabbix", "splunk", "elk", "siem", "waf", "ids", "ips",
-    "vpn1", "vpn2", "jump", "bastion", "堡垒", "wireguard", "openvpn",
+    "vpn1", "vpn2", "jump", "bastion", "relay", "wireguard", "openvpn",
 ]
 
 DNS_RECORD_TYPES = ["A", "AAAA", "MX", "TXT", "CNAME", "NS", "SOA", "SRV", "PTR", "CAA"]
@@ -234,7 +234,7 @@ VHS_TAPE_LABELS = ["MAXELL HGX Gold", "TDK SA-X", "Fuji Pro", "Sony V", "JVC Sup
 RADAR_BLIP_TYPES = ["HOSTILE", "UNKNOWN", "FRIENDLY", "CIVILIAN", "SUSPECT", "DECOY"]
 
 # Particle systems
-PARTICLE_CHARS = ["*", ".", ":", "+", "#", "@", "%", "~", "o", "O", "0", "✦", "✧", "⚡", "★"]
+PARTICLE_CHARS = ["*", ".", ":", "+", "#", "@", "%", "~", "o", "O", "0", "✦", "✧", "◈", "★"]
 
 # Payload builder
 PAYLOAD_TYPES = ["windows/meterpreter/reverse_tcp", "linux/x64/shell_reverse_tcp",
@@ -589,7 +589,7 @@ THEME_STYLES: Dict[str, Dict[str, str]] = {
         "dark": "\033[38;5;125m",
         "bar_on": "▰",
         "bar_off": "▱",
-        "spark": "⚡✧⚡✦⚡✧",
+        "spark": "◈✧◈✦◈✧",
     },
     "plasma": {
         "bright": "\033[94m",
@@ -621,7 +621,7 @@ THEME_STYLES: Dict[str, Dict[str, str]] = {
         "dark": "\033[2;34m",
         "bar_on": "▬",
         "bar_off": "─",
-        "spark": "⚡≈⚡≈⚡",
+        "spark": "◈≈◈≈◈",
     },
     "twilight": {
         "bright": "\033[35m",

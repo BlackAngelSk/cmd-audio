@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from typing import Any, Dict, List, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from cmd_audio.logging_config import get_logger
@@ -12,11 +13,40 @@ from cmd_audio.config import THEMES as _THEMES
 
 logger = get_logger(__name__)
 
+# <repo>/live_controls.html -- the page shipped with the project.
+LIVE_CONTROLS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir, "live_controls.html"
+)
+
+
+def load_live_controls_html() -> str:
+    """Read the bundled live-controls page (empty string when missing)."""
+    try:
+        with open(LIVE_CONTROLS_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except OSError as exc:
+        logger.warning("live_controls.html not found at %s: %s", LIVE_CONTROLS_PATH, exc)
+        return ""
+
+
+def _current_live_state() -> Any:
+    """The live state this server drives.
+
+    Prefers the state handed to the server, but falls back to the process-wide
+    one so the controls work no matter which component started the server.
+    """
+    try:
+        from cmd_audio.control import get_browser_live_state
+
+        return get_browser_live_state()
+    except Exception:
+        return None
+
 
 class AudioServer:
     """HTTP server that serves a browser-based settings UI and visualization."""
 
-    def __init__(self, host: str = "localhost", port: int = 8080):
+    def __init__(self, host: str = "localhost", port: int = 8080, live_on_root: bool = False):
         self.host = host
         self.port = port
         self.server: Optional[HTTPServer] = None
@@ -28,15 +58,34 @@ class AudioServer:
         self.config_event = threading.Event()
         self.live_controls_html: str = ""
         self.live_state: Any = None
+        # When True, "/" serves the live controls instead of the setup form
+        # (used for --web sessions, where setup already happened).
+        self.live_on_root: bool = live_on_root
+        self.bind_error: Optional[str] = None
 
     def set_live_state(self, live_state: Any) -> None:
         """Set the live control state for runtime music changes."""
         self.live_state = live_state
 
-    def start(self) -> None:
+    def _state(self) -> Any:
+        """Live state for request handling (explicit state first, then global)."""
+        return self.live_state if self.live_state is not None else _current_live_state()
+
+    def start(self) -> bool:
+        """Start serving. Returns False when the port could not be bound."""
+        if not self.live_controls_html:
+            self.live_controls_html = load_live_controls_html()
         self.running = True
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
+        # Give the socket a moment so a bind failure is reported, not swallowed.
+        for _ in range(150):
+            if self.server is not None or self.bind_error is not None:
+                break
+            time.sleep(0.02)
+        if self.server is not None:
+            self.port = int(self.server.server_address[1])
+        return self.server is not None
 
     def stop(self) -> None:
         self.running = False
@@ -49,7 +98,9 @@ class AudioServer:
             self.server = HTTPServer((self.host, self.port), handler)
             self.server.serve_forever()
         except Exception as e:
-            logger.error("Web server error: %s", e)
+            self.bind_error = str(e)
+            self.running = False
+            logger.error("Web server error on %s:%s: %s", self.host, self.port, e)
 
     def set_current_config(self, config: Dict[str, Any]) -> None:
         self.current_config = config
@@ -72,25 +123,38 @@ class AudioServer:
                 pass
 
             def do_GET(self) -> None:
-                if self.path == "/" or self.path == "/settings":
+                path = self.path.split("?", 1)[0]
+                if path == "/" and server.live_on_root:
+                    self._send_live_controls()
+                elif path == "/" or path == "/settings":
                     self._send_html(SETTINGS_HTML)
-                elif self.path == "/live-controls" or self.path == "/live":
-                    html = server.live_controls_html
-                    if not html:
-                        self._send_error(404, "Live controls HTML not loaded")
+                elif path == "/live-controls" or path == "/live":
+                    self._send_live_controls()
+                elif path == "/api/config":
+                    ls = server._state()
+                    if ls is not None and server.live_on_root:
+                        # A live session: report the running configuration.
+                        self._send_json(ls.to_dict())
                     else:
-                        self._send_html(html)
-                elif self.path == "/api/config":
-                    self._send_json(server.current_config)
-                elif self.path == "/api/audio":
+                        self._send_json(server.current_config)
+                elif path == "/api/audio":
                     self._send_json(server.audio_data)
-                elif self.path == "/api/live-state":
-                    if server.live_state is not None:
-                        self._send_json(server.live_state.snapshot().__dict__)
+                elif path == "/api/live-state":
+                    ls = server._state()
+                    if ls is not None:
+                        self._send_json(ls.snapshot().__dict__)
                     else:
                         self._send_json({"error": "Live state not available"})
                 else:
                     self.send_error(404)
+
+            def _send_live_controls(self) -> None:
+                html = server.live_controls_html or load_live_controls_html()
+                if not html:
+                    self._send_error(404, "Live controls HTML not loaded")
+                else:
+                    server.live_controls_html = html
+                    self._send_html(html)
 
             def do_POST(self) -> None:
                 if self.path == "/api/start":
@@ -112,8 +176,9 @@ class AudioServer:
                         if not music_url:
                             self._send_json({"status": "error", "message": "No URL provided"})
                             return
-                        if server.live_state is not None:
-                            server.live_state.request_music_change(music_url)
+                        ls = server._state()
+                        if ls is not None:
+                            ls.request_music_change(music_url)
                             self._send_json({"status": "ok", "message": "Music change requested"})
                         else:
                             self._send_json({"status": "error", "message": "Live state not available"})
@@ -124,64 +189,77 @@ class AudioServer:
                     body = self.rfile.read(length)
                     try:
                         data = json.loads(body.decode())
-                        if server.live_state is None:
+                        ls = server._state()
+                        if ls is None:
                             self._send_json({"status": "error", "message": "Live state not available"})
                             return
-                        ls = server.live_state
-                        # Apply each setting if present
-                        if "sensitivity" in data:
-                            ls.set_sensitivity(float(data["sensitivity"]))
+                        # Apply each setting if present. Values arrive as
+                        # whatever the DOM control produced, so coerce by kind.
+                        applied: List[str] = []
+                        rejected: List[str] = []
+
+                        numeric = {
+                            "sensitivity": ls.set_sensitivity,
+                        }
+                        strings = {
+                            "theme": ls.set_theme,
+                            "theme_mode": ls.set_theme_mode,
+                            "banner_text": ls.set_banner_text,
+                            "banner_align": ls.set_banner_align,
+                            "banner_anim": ls.set_banner_anim,
+                            "banner_size": ls.set_banner_size,
+                            "ui_style": ls.set_ui_style,
+                            "quality_mode": ls.set_quality_mode,
+                            "scene_sync": ls.set_scene_sync,
+                            "terminal_mode": ls.set_terminal_mode,
+                            "operation_mode": ls.set_operation_mode,
+                            "target_lock": ls.set_target_lock,
+                        }
+                        booleans = {
+                            "show_banner": ls.set_show_banner,
+                            "unicode_bars": ls.set_unicode_bars,
+                            "lock_scene": ls.set_lock_scene,
+                            "alert_tones": ls.set_alert_tones,
+                            "mission_timeline": ls.set_mission_timeline,
+                            "defender_ai": ls.set_defender_ai,
+                            "audio_fx": ls.set_audio_fx,
+                            "paused": ls.set_paused,
+                        }
+
+                        for key, setter in numeric.items():
+                            if key in data:
+                                setter(float(data[key]))
+                                applied.append(key)
+                        for key, setter in strings.items():
+                            if key in data:
+                                setter(str(data[key]))
+                                applied.append(key)
+                        for key, setter in booleans.items():
+                            if key in data:
+                                setter(bool(data[key]))
+                                applied.append(key)
+
+                        # Bounds are pairs: only the changed half is sent, so
+                        # merge with the current values instead of resetting the
+                        # other one to its default.
+                        snap = ls.snapshot()
                         if "speed_min" in data or "speed_max" in data:
                             ls.set_speed_bounds(
-                                float(data.get("speed_min", 0.25)),
-                                float(data.get("speed_max", 3.0))
+                                float(data.get("speed_min", snap.speed_min)),
+                                float(data.get("speed_max", snap.speed_max)),
                             )
+                            applied.extend(k for k in ("speed_min", "speed_max") if k in data)
                         if "terminal_switch_min" in data or "terminal_switch_max" in data:
                             ls.set_terminal_switch_bounds(
-                                float(data.get("terminal_switch_min", 4.0)),
-                                float(data.get("terminal_switch_max", 11.0))
+                                float(data.get("terminal_switch_min", snap.terminal_switch_min)),
+                                float(data.get("terminal_switch_max", snap.terminal_switch_max)),
                             )
-                        if "theme" in data:
-                            ls.set_theme(str(data["theme"]))
-                        if "theme_mode" in data:
-                            ls.set_theme_mode(str(data["theme_mode"]))
-                        if "banner_text" in data:
-                            ls.set_banner_text(str(data["banner_text"]))
-                        if "banner_align" in data:
-                            ls.set_banner_align(str(data["banner_align"]))
-                        if "banner_anim" in data:
-                            ls.set_banner_anim(str(data["banner_anim"]))
-                        if "banner_size" in data:
-                            ls.set_banner_size(str(data["banner_size"]))
-                        if "show_banner" in data:
-                            ls.set_show_banner(bool(data["show_banner"]))
-                        if "ui_style" in data:
-                            ls.set_ui_style(str(data["ui_style"]))
-                        if "quality_mode" in data:
-                            ls.set_quality_mode(str(data["quality_mode"]))
-                        if "unicode_bars" in data:
-                            ls.set_unicode_bars(bool(data["unicode_bars"]))
-                        if "scene_sync" in data:
-                            ls.set_scene_sync(str(data["scene_sync"]))
-                        if "terminal_mode" in data:
-                            ls.set_terminal_mode(str(data["terminal_mode"]))
-                        if "operation_mode" in data:
-                            ls.set_operation_mode(str(data["operation_mode"]))
-                        if "target_lock" in data:
-                            ls.set_target_lock(str(data["target_lock"]))
-                        if "lock_scene" in data:
-                            ls.set_lock_scene(bool(data["lock_scene"]))
-                        if "alert_tones" in data:
-                            ls.set_alert_tones(bool(data["alert_tones"]))
-                        if "mission_timeline" in data:
-                            ls.set_mission_timeline(bool(data["mission_timeline"]))
-                        if "defender_ai" in data:
-                            ls.set_defender_ai(bool(data["defender_ai"]))
-                        if "audio_fx" in data:
-                            ls.set_audio_fx(bool(data["audio_fx"]))
-                        if "paused" in data:
-                            ls.set_paused(bool(data["paused"]))
-                        self._send_json({"status": "ok"})
+                            applied.extend(
+                                k for k in ("terminal_switch_min", "terminal_switch_max") if k in data
+                            )
+
+                        rejected = [k for k in data if k not in applied]
+                        self._send_json({"status": "ok", "applied": applied, "ignored": rejected})
                     except Exception as e:
                         self._send_json({"status": "error", "message": str(e)})
                 elif self.path == "/api/cancel":
@@ -213,10 +291,28 @@ class AudioServer:
         return Handler
 
 
-def start_web_server(host: str = "localhost", port: int = 8080) -> AudioServer:
-    server = AudioServer(host, port)
-    server.start()
-    return server
+def start_web_server(
+    host: str = "localhost",
+    port: int = 8080,
+    live_on_root: bool = True,
+    max_port_tries: int = 10,
+) -> AudioServer:
+    """Start a web server, walking up to the next free port if one is taken.
+
+    A port clash used to be logged and swallowed, leaving the browser controls
+    pointing at a dead socket.
+    """
+    server: Optional[AudioServer] = None
+    candidates = [port] if port == 0 else list(range(port, port + max_port_tries))
+    for candidate in candidates:
+        server = AudioServer(host, candidate, live_on_root=live_on_root)
+        if server.start():
+            if candidate != port:
+                logger.warning("Port %s busy -- serving live controls on %s instead", port, candidate)
+            return server
+    if server is not None:
+        logger.error("Could not bind any port in %s..%s: %s", port, port + max_port_tries - 1, server.bind_error)
+    return server if server is not None else AudioServer(host, port, live_on_root=live_on_root)
 
 
 def is_web_server_available() -> bool:

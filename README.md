@@ -1,19 +1,24 @@
 # CMD-AUDIO
 
-Music-reactive terminal "hacker" visualization with optional setup/control popup UI.
+Music-reactive terminal "hacker" visualization with a browser-based live control panel.
 
-The project runs from a single script:
-- `music_sync_hacker_effect.py`
+Run it with the bundled launcher (uses the project virtualenv):
+
+```bash
+./start.sh /path/to/song.mp3
+```
 
 ## Features
 
 - Audio-synced animated terminal scenes
 - Multiple themes and presets
 - Scene packs and adaptive scene sync
-- Optional Tkinter setup/control window
+- Browser live-controls panel (see `live_controls.html`)
 - Frame recording and replay support
 - Optional plugin hook support
 - Optional diagnostics output
+- The header shows the **song name** (ID3 tag or the YouTube video title), never
+  the URL or a temporary file path
 
 ## Requirements
 
@@ -48,33 +53,51 @@ The `--youtube` option will gracefully inform you if yt-dlp is not installed.
 Run with an audio file:
 
 ```bash
-python3 music_sync_hacker_effect.py /path/to/song.mp3
+./start.sh /path/to/song.mp3
 ```
 
-Run with a YouTube video (downloads audio):
+Run with a YouTube video (downloads audio; the header shows the video title):
 
 ```bash
-python3 music_sync_hacker_effect.py --youtube "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+./start.sh --youtube "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 Run with a preset and diagnostics:
 
 ```bash
-python3 music_sync_hacker_effect.py /path/to/song.mp3 --preset chaos --diagnostics
+./start.sh /path/to/song.mp3 --preset chaos --diagnostics
 ```
 
 Run using microphone/system capture:
 
 ```bash
-python3 music_sync_hacker_effect.py --source mic --capture-seconds 30
-python3 music_sync_hacker_effect.py --source system --capture-seconds 30
+./start.sh --source mic --capture-seconds 30
+./start.sh --source system --capture-seconds 30
 ```
 
-Open setup popup before run:
+## Browser controls
+
+Serve the live-controls panel alongside the render:
 
 ```bash
-python3 music_sync_hacker_effect.py --setup-ui
+./start.sh /path/to/song.mp3 --web --web-port 8080
 ```
+
+The app prints the URL it is serving and the panel is at `/` (so
+`http://localhost:8080/`). The panel drives the running render: sliders, theme,
+banner, UI style and the feature toggles apply on the next frame, and the page
+polls `/api/live-state` every 2s so keyboard changes made in the terminal show
+up in the browser too.
+
+Controls that can only take effect when a run starts (`sample_rate`,
+`web_enable`, `normalize`, `adaptive_fps`, ...) are labelled **next start** in
+the panel; the backend reports them under `ignored` instead of pretending.
+
+`--setup-ui` serves the setup form at `/` and the panel at `/live-controls`.
+`--setup-ui --web` together reuse the same port instead of failing to bind.
+
+If the panel cannot reach the backend it shows a red banner instead of silently
+doing nothing.
 
 ## Common Options
 
@@ -106,7 +129,7 @@ python3 music_sync_hacker_effect.py --setup-ui
 Get complete CLI help:
 
 ```bash
-python3 music_sync_hacker_effect.py --help
+./start.sh --help
 ```
 
 ## Live Controls
@@ -141,5 +164,7 @@ While running in terminal:
 ## Notes
 
 - If your input is not WAV, the script uses `ffmpeg` to convert it.
+- The song name in the header comes from the file's tags (`ffprobe`) and falls
+  back to a cleaned-up filename; YouTube links are resolved to the video title.
 - If `tkinter` is unavailable, UI flags are ignored with a warning and terminal mode continues.
 - For troubleshooting startup environment and tools, run with `--diagnostics`.

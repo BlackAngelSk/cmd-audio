@@ -37,7 +37,8 @@ class TestDecodePcmToMonoSamples:
     def test_16bit_mono(self) -> None:
         data = struct.pack("<hhh", 1000, -1000, 0)
         samples = decode_pcm_to_mono_samples(data, sample_width=2, channels=1)
-        assert samples == [1000, -1000, 0]
+        # 16-bit mono comes back as an array('h') (decoded in C for speed).
+        assert list(samples) == [1000, -1000, 0]
 
     def test_16bit_stereo(self) -> None:
         data = struct.pack("<hhhh", 1000, -1000, 2000, -2000)

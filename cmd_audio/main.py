@@ -34,10 +34,11 @@ from cmd_audio.config import (
     CURRENT_THEME_MODE,
     BASS_THRESHOLD,
 )
-from cmd_audio.utils import clamp, fit_text, colorize_status
+from cmd_audio.utils import clamp, fit_text, colorize_status, visible_len
 from cmd_audio.terminal import RawInput
 from cmd_audio.audio import AudioFeatures, make_demo_audio_features, read_audio_features
 from cmd_audio.audio_input import prepare_audio_input, get_random_attack_pattern, is_youtube_url, get_last_youtube_title
+from cmd_audio.music_meta import track_display_name, remember_youtube_title
 from cmd_audio.effects import (
     apply_terminal_fx,
     build_banner_lines,
@@ -502,15 +503,25 @@ def main() -> int:
         if web_server is None:
             web_server = setup_server
 
-    # Start web server if requested
+    # Start web server if requested. Never bind a second socket when the setup
+    # UI server is already running -- that used to fail with "address in use"
+    # and left the browser controls talking to a dead port.
     if args.web:
-        try:
-            web_server = start_web_server(host=args.web_host, port=args.web_port)
-            if live_state is not None:
-                web_server.set_live_state(live_state)
-            logger.info("Web server started at http://%s:%d", args.web_host, args.web_port)
-        except Exception as exc:
-            logger.error("Failed to start web server: %s", exc)
+        if setup_server is not None:
+            web_server = setup_server
+            logger.info("Reusing setup server for live controls on port %s", setup_server.port)
+        else:
+            try:
+                web_server = start_web_server(host=args.web_host, port=args.web_port, live_on_root=True)
+                if live_state is not None:
+                    web_server.set_live_state(live_state)
+                logger.info("Live controls on http://%s:%s", args.web_host, web_server.port)
+            except Exception as exc:
+                logger.error("Failed to start web server: %s", exc)
+
+    if web_server is not None and web_server.server is not None:
+        _path = "/" if web_server.live_on_root else "/live-controls"
+        print(f"\n  Browser controls: http://{args.web_host}:{web_server.port}{_path}\n")
 
     # Start remote control socket if requested
     remote_sock = None
@@ -638,6 +649,20 @@ def main() -> int:
             logger.error("Failed to read audio: %s", exc)
             close_live_ui()
             return 1
+
+    # Resolve the human-readable song name now that downloads have completed.
+    # This is what every UI shows -- never the link, never a scratch path.
+    if is_youtube_url(audio_path):
+        yt_title = get_last_youtube_title()
+        if yt_title:
+            remember_youtube_title(audio_path, yt_title)
+        track_name = track_display_name(audio_path)
+    elif audio_path and audio_path != "(demo mode)":
+        track_name = track_display_name(audio_path)
+    else:
+        track_name = "DEMO"
+    if live_state is not None:
+        live_state.set_music_file(track_name)
 
     # Apply volume normalization if requested
     if args.normalize and audio is not None:
@@ -886,6 +911,7 @@ def main() -> int:
     keys_line = "keys: q p +/- [ ] t b e c v x m r z 0 n u 1 2 3 a y k j g h o l w d D ?"
     width = 100
     height = 30
+    next_size_check_at = 0.0
     mission_phase_name = MISSION_PHASES[0]["name"]
     mission_objective = MISSION_PHASES[0]["objective"]
     mission_phase_idx = 0
@@ -931,14 +957,14 @@ def main() -> int:
         live_state.set_mission_timeline(mission_timeline_enabled)
         live_state.set_defender_ai(defender_ai_enabled)
         live_state.set_audio_fx(audio_fx_enabled)
-        yt_title = get_last_youtube_title()
-        live_state.set_music_file(yt_title or audio_path)
+        # `track_name` (resolved above) -- never the URL or a scratch path.
+        live_state.set_music_file(track_name)
 
     def switch_music_file(new_music_path: str, preserve_session: bool = False) -> None:
         nonlocal audio, wav_input, playback_input, cleanup_wav, player
         nonlocal start, visual_t, prev_level, pulse, history, logs
         nonlocal next_bpm_tick_at, bpm_interval, target_lock, operation_mode
-        nonlocal net_state, shell_lines, audio_path
+        nonlocal net_state, shell_lines, audio_path, track_name
 
         new_music = new_music_path.strip()
         if not new_music:
@@ -976,6 +1002,13 @@ def main() -> int:
         bpm_interval = (60.0 / audio.bpm_estimate) if audio.bpm_estimate > 0 else 0.0
         next_bpm_tick_at = bpm_interval if bpm_interval > 0 else 0.0
 
+        # Resolve the new track's name (a YouTube download has just published it).
+        if is_youtube_url(new_music):
+            yt_title = get_last_youtube_title()
+            if yt_title:
+                remember_youtube_title(new_music, yt_title)
+        track_name = track_display_name(new_music)
+
         start = time.perf_counter()
         if not preserve_session:
             visual_t = 0.0
@@ -988,11 +1021,10 @@ def main() -> int:
             net_state = "UPLINK STABLE"
             shell_lines = generate_shell_feed(0.0, False, terminal_mode)
         else:
-            logs.append(f" {visual_t:06.2f}s Track     SWITCH   -> {os.path.basename(new_music)}")
+            logs.append(f" {visual_t:06.2f}s Track     SWITCH   -> {track_name}")
 
         if live_state is not None:
-            yt_title = get_last_youtube_title()
-            live_state.set_music_file(yt_title or new_music)
+            live_state.set_music_file(track_name)
             live_state.set_music_status("Loaded successfully")
 
     def advance_playlist(step: int) -> bool:
@@ -1365,9 +1397,13 @@ def main() -> int:
                 while visual_t >= next_bpm_tick_at:
                     next_bpm_tick_at += bpm_interval
 
-            term = shutil.get_terminal_size(fallback=(100, 30))
-            width = max(30, term.columns)
-            height = max(10, term.lines - 1)
+            # Terminal size is an ioctl; poll it a few times a second instead of
+            # on every single frame.
+            if visual_t >= next_size_check_at:
+                term = shutil.get_terminal_size(fallback=(100, 30))
+                width = max(30, term.columns)
+                height = max(10, term.lines - 1)
+                next_size_check_at = visual_t + 0.25
 
             hist_budget += speed_factor * 0.85
             while hist_budget >= 1.0:
@@ -1515,11 +1551,10 @@ def main() -> int:
 
             audio_t = idx * frame_time
 
-            # Render frame
-            body_h = max(6, height - 4)
-            if show_banner or banner_text.strip():
-                banner_row_count = 5 if banner_size == "large" else 1
-                body_h = max(6, body_h - banner_row_count)
+            # Render frame. The chrome is: top rule + head + now-playing +
+            # footer + bottom rule = 5 rows, plus the optional banner.
+            banner_row_count = (5 if banner_size == "large" else 1) if (show_banner or banner_text.strip()) else 0
+            body_h = max(6, height - 5 - banner_row_count)
 
             left_w = max(24, width // 3)
             right_w = max(24, width // 4)
@@ -1541,25 +1576,38 @@ def main() -> int:
             )
 
             rows: List[str] = []
-            # Extract music name for display
-            yt_title = get_last_youtube_title()
-            if yt_title:
-                music_display_name = yt_title
-            elif audio_path and audio_path != "(demo mode)":
-                music_display_name = os.path.basename(audio_path)
-            else:
-                music_display_name = "DEMO"
-            header = f"{_cfg.GREEN_BRIGHT}CMD-AUDIO :: MUSIC SYNC CONSOLE :: {operation_mode}{_cfg.RESET}"
-            beat_word = f"{_cfg.GREEN_BRIGHT}BEAT{_cfg.RESET}" if pulse > 0 else f"{_cfg.GREEN_DARK}IDLE{_cfg.RESET}"
-            top_rule = f"{_cfg.GREEN_DIM}{'=' * max(1, width)}{_cfg.RESET}"
+            # The current song's *name* -- resolved once per track, never a URL
+            # and never a scratch file path.
+            music_display_name = track_name
+            inner_w = max(1, width - 2)
+            dim, bright, dark, reset = _cfg.GREEN_DIM, _cfg.GREEN_BRIGHT, _cfg.GREEN_DARK, _cfg.RESET
+
+            # --- framed title bar -------------------------------------------
+            title = "[ CMD-AUDIO :: MUSIC SYNC CONSOLE ]"
+            edge = max(0, (inner_w - len(title)) // 2)
+            top_rule = f"{dim}+{'=' * edge}{bright}{title}{dim}{'=' * max(0, inner_w - edge - len(title))}+{reset}"
+
+            def framed(left: str, right: str = "") -> str:
+                """Build a bordered row with *left* content and right-aligned *right*."""
+                lw = visible_len(left)
+                rw = visible_len(right)
+                gap = inner_w - lw - rw
+                if gap < 1:
+                    body = fit_text(left, inner_w)
+                else:
+                    body = left + (" " * gap) + right
+                return f"{dim}|{reset}{body}{dim}|{reset}"
+
+            beat_word = f"{bright}BEAT{reset}" if pulse > 0 else f"{dark}IDLE{reset}"
             mode_tag = "MIN" if args.ui_style == "minimal" else "FULL"
-            head_line = fit_text(
-                f"{header}   {beat_word}   lock:{target_lock}   mission:{mission_phase_name}   theme:{theme_name}({theme_mode})   term:{terminal_mode}   ui:{mode_tag}",
-                width,
+            head_line = framed(
+                f"{bright}CMD-AUDIO{reset} {dim}//{reset} {operation_mode}  {beat_word}",
+                f"{dim}tgt:{target_lock}  mission:{mission_phase_name}  theme:{theme_name}/{theme_mode}  term:{terminal_mode}  ui:{mode_tag}{reset}",
             )
-            music_line = fit_text(
-                f"{_cfg.GREEN_DIM}♪ Now Playing: {_cfg.GREEN_BRIGHT}{music_display_name}{_cfg.RESET}",
-                width,
+            progress = clamp(audio_t / audio.duration, 0.0, 1.0) if audio.duration > 0 else 0.0
+            music_line = framed(
+                f"{bright}\u266a Now Playing:{reset} {bright}{music_display_name}{reset}",
+                f"{dim}{audio_t:5.1f}s / {audio.duration:5.1f}s  {int(progress * 100):3d}%{reset}",
             )
             rows.extend([top_rule, head_line, music_line])
 
@@ -1568,16 +1616,25 @@ def main() -> int:
                     rows.append(f"{_cfg.GREEN_BRIGHT}{bl}{_cfg.RESET}")
 
             if args.ui_style == "minimal" or width < 100:
-                p1_h = max(4, body_h // 3)
-                p2_h = max(4, body_h // 3)
-                p3_h = max(4, body_h - p1_h - p2_h)
-                box1 = panel_box("events", width, p1_h, left_lines)
-                mini_center = center_lines[: max(1, p2_h - 2)]
-                box2 = panel_box("array", width, p2_h, mini_center)
-                box3 = panel_box("telemetry", width, p3_h, right_lines)
-                rows.extend(box1)
-                rows.extend(box2)
-                rows.extend(box3)
+                # Stacked panels must consume exactly body_h rows, otherwise the
+                # bottom border is pushed off-screen.
+                if body_h >= 9:
+                    p1_h = body_h // 3
+                    p2_h = (body_h - p1_h) // 2
+                    p3_h = body_h - p1_h - p2_h
+                    stack = [
+                        ("events", left_lines),
+                        ("array", center_lines[: max(1, p2_h - 2)]),
+                        ("telemetry", right_lines),
+                    ]
+                    heights = [p1_h, p2_h, p3_h]
+                else:
+                    p1_h = max(3, body_h // 2)
+                    p2_h = max(3, body_h - p1_h)
+                    stack = [("events", left_lines), ("telemetry", right_lines)]
+                    heights = [p1_h, p2_h]
+                for (panel_name, panel_body), panel_h in zip(stack, heights):
+                    rows.extend(panel_box(panel_name, width, panel_h, panel_body))
             elif width < 150:
                 col_w_left = max(28, (width // 2) - 1)
                 col_w_right = max(28, width - col_w_left - 1)
@@ -1594,15 +1651,24 @@ def main() -> int:
                     rows.append(f"{left_box[i]} {center_box[i]} {right_box[i]}")
 
             pulse_word = random.choice(["ACCESS", "OVERRIDE", "BYPASS", "DECRYPT", "INJECT", "TRACE"]) if pulse > 0 else "SYNC"
-            footer_meter_w = max(10, width - 44)
             footer_net = colorize_status(net_state, 0.92 if "COLLAPSE" in net_state else 0.20)
-            footer = fit_text(
-                f"{_cfg.GREEN_BRIGHT}::{pulse_word:<8}::{_cfg.RESET} {meter_bar(level, footer_meter_w)}  flux:{int(flux * 100):3d}%  {footer_net}",
-                width,
+            tail = f"flux:{int(flux * 100):3d}%  {footer_net}"
+            right_tag = f"{dark}audio-fx:{'on ' if audio_fx_enabled else 'off'}  drops:{dropped_frames}{reset}"
+            # Keep everything inside the frame. meter_bar() renders width + 7
+            # columns (brackets, space and the percentage), so account for that.
+            prefix = f"{bright}::{pulse_word:<8}::{reset} "
+            footer_meter_w = max(
+                6, inner_w - visible_len(prefix) - visible_len(tail) - visible_len(right_tag) - 11
+            )
+            footer = framed(
+                f"{prefix}{meter_bar(level, footer_meter_w)}  {tail}",
+                right_tag,
             )
             rows.append(footer)
-            rows.append(top_rule)
-            rows = apply_terminal_fx(rows, width, glitch_frames, scanline_flash, jitter)
+            rows.append(f"{dim}+{'=' * inner_w}+{reset}")
+            rows = apply_terminal_fx(
+                rows, width, glitch_frames, scanline_flash, jitter, body_start=3 + banner_row_count
+            )
             # Pad rows to exactly height lines to prevent vertical shift
             while len(rows) < height:
                 rows.append(" " * width)

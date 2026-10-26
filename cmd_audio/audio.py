@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import array
 import math
 import struct
 import wave
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 from cmd_audio.config import FREQ_CENTERS
 from cmd_audio.utils import clamp, normalize, smooth
+
+# A decoded mono channel: an array('h') for the fast 16-bit path, otherwise a list.
+Samples = Union[array.array, List[int]]
 
 
 @dataclass
@@ -28,8 +32,13 @@ class AudioFeatures:
 # PCM helpers
 # ---------------------------------------------------------------------------
 
-def decode_pcm_to_mono_samples(data: bytes, sample_width: int, channels: int) -> List[int]:
-    """Decode raw PCM *data* into mono integer samples."""
+def decode_pcm_to_mono_samples(data: bytes, sample_width: int, channels: int) -> Samples:
+    """Decode raw PCM *data* into mono integer samples.
+
+    The common 16-bit / 8-bit cases are decoded with :mod:`array`, which does
+    the byte unpacking in C -- the per-sample ``struct.unpack_from`` loop this
+    used to run took seconds on a full-length track.
+    """
     if sample_width not in (1, 2, 3, 4):
         raise ValueError(f"Unsupported sample width: {sample_width} bytes")
 
@@ -38,26 +47,32 @@ def decode_pcm_to_mono_samples(data: bytes, sample_width: int, channels: int) ->
         return []
 
     frame_count = len(data) // frame_size
-    out: List[int] = []
-
-    if sample_width == 1:
-        for i in range(frame_count):
-            offset = i * frame_size
-            total = 0
-            for c in range(channels):
-                total += data[offset + c] - 128
-            out.append(int(total / channels))
-        return out
 
     if sample_width == 2:
-        for i in range(frame_count):
-            offset = i * frame_size
-            total = 0
-            for c in range(channels):
-                ch_off = offset + (c * sample_width)
-                total += struct.unpack_from("<h", data, ch_off)[0]
-            out.append(int(total / channels))
-        return out
+        samples = array.array("h")
+        samples.frombytes(data)
+        if channels == 1:
+            return samples
+        if channels == 2:
+            left = samples[0::2]
+            right = samples[1::2]
+            return [int((a + b) / 2) for a, b in zip(left, right)]
+        return [
+            int(sum(samples[i:i + channels]) / channels)
+            for i in range(0, len(samples) - channels + 1, channels)
+        ]
+
+    if sample_width == 1:
+        raw = array.array("B")
+        raw.frombytes(data)
+        if channels == 1:
+            return [b - 128 for b in raw]
+        return [
+            int(sum(raw[i:i + channels]) / channels) - 128
+            for i in range(0, len(raw) - channels + 1, channels)
+        ]
+
+    out: List[int] = []
 
     if sample_width == 3:
         for i in range(frame_count):
@@ -84,7 +99,7 @@ def decode_pcm_to_mono_samples(data: bytes, sample_width: int, channels: int) ->
     return out
 
 
-def rms_from_samples(samples: List[int]) -> float:
+def rms_from_samples(samples: Samples) -> float:
     if not samples:
         return 0.0
     energy = 0.0
@@ -93,7 +108,7 @@ def rms_from_samples(samples: List[int]) -> float:
     return math.sqrt(energy / len(samples))
 
 
-def goertzel_power(samples: List[int], sample_rate: int, freq: float) -> float:
+def goertzel_power(samples: Samples, sample_rate: int, freq: float) -> float:
     if not samples:
         return 0.0
     omega = 2.0 * math.pi * (freq / float(sample_rate))
@@ -194,25 +209,35 @@ def read_audio_features(wav_path: str, fps: int) -> AudioFeatures:
         sample_rate = wf.getframerate()
         total_frames = wf.getnframes()
 
-        frames_per_bucket = max(1, sample_rate // fps)
+        # Halving the sample rate halves the Goertzel work. The band centres are
+        # octave-spaced and top out at 7 kHz, so a 2x decimation stays below the
+        # new Nyquist and leaves the normalised band shape essentially unchanged.
+        decimation = 2 if sample_rate >= 22050 else 1
+        analysis_rate = sample_rate // decimation
+
+        frames_per_bucket = max(1, analysis_rate // fps)
         levels_raw: List[float] = []
         bands_raw: List[List[float]] = []
+        bands = FREQ_CENTERS
+        nyquist = analysis_rate / 2.0
 
         while True:
-            data = wf.readframes(frames_per_bucket)
+            data = wf.readframes(frames_per_bucket * decimation)
             if not data:
                 break
 
             samples = decode_pcm_to_mono_samples(data, sample_width, channels)
-            rms = rms_from_samples(samples)
-            levels_raw.append(rms)
+            if decimation > 1:
+                samples = samples[::decimation]
+
+            levels_raw.append(rms_from_samples(samples))
 
             band_row: List[float] = []
-            for f in FREQ_CENTERS:
-                if f >= (sample_rate / 2.0):
+            for f in bands:
+                if f >= nyquist:
                     band_row.append(0.0)
                 else:
-                    band_row.append(goertzel_power(samples, sample_rate, f))
+                    band_row.append(goertzel_power(samples, analysis_rate, f))
             bands_raw.append(band_row)
 
     if not levels_raw:

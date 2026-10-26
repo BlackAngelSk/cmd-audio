@@ -8,7 +8,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 import cmd_audio.config as _cfg
-from cmd_audio.utils import align_text, fit_text, visible_len
+from cmd_audio.utils import align_text, crop_visible, fit_text, strip_ansi, visible_len
 
 
 # ---------------------------------------------------------------------------
@@ -157,14 +157,16 @@ def build_banner_lines(text: str, width: int, align: str, anim: str, size: str, 
     if anim == "scroll":
         padded = ["   " + r + "   " for r in block_rows]
         total = len(padded[0])
-        # Align offset to character boundaries (each char is 6 columns: 5 + 1 gap)
+        # Align offset to character boundaries (each char is 6 columns: 5 + gap)
+        # and show whole glyphs only -- a partial glyph at the edge looks broken.
         char_width = 6
+        visible = max(1, width // char_width) * char_width
         raw_offset = int(t * 6.0) % max(1, total)
         offset = (raw_offset // char_width) * char_width
         result = []
         for r in padded:
             doubled = r + r + r  # triple to ensure full coverage
-            result.append(fit_text(doubled[offset: offset + width], width))
+            result.append(align_text(doubled[offset: offset + visible], width, "left"))
         return result
 
     if anim == "pulse":
@@ -184,23 +186,87 @@ def build_banner_lines(text: str, width: int, align: str, anim: str, size: str, 
 # Terminal FX
 # ---------------------------------------------------------------------------
 
-def apply_terminal_fx(rows: List[str], width: int, glitch_frames: int, scanline_flash: int, jitter: int) -> List[str]:
+_TEAR_MSG = "//// SIGNAL TEAR ////"
+
+
+def _glitch_row(row: str, width: int, msg: str) -> str:
+    """Overlay a glitch message on a framed row without breaking its borders.
+
+    Every box-drawing column of the original row is preserved, so a signal tear
+    reads as interference inside the panels instead of a punched-out line.
+    """
+    plain = strip_ansi(row)
+    if len(plain) < 6:
+        return fit_text(f"{_cfg.GREEN_BRIGHT}{msg}{_cfg.RESET}", width)
+
+    keep = {i for i, ch in enumerate(plain) if ch in "+|"}
+    chars = [ch if i in keep else " " for i, ch in enumerate(plain)]
+    msg_cells = set()
+    for offset, ch in enumerate(msg):
+        pos = 1 + offset
+        if pos >= len(chars):
+            break
+        if pos not in keep:
+            chars[pos] = ch
+            msg_cells.add(pos)
+
+    parts: List[str] = []
+    state = ""
+    for i, ch in enumerate(chars):
+        want = _cfg.GREEN_DIM if i in keep else (_cfg.GREEN_BRIGHT if i in msg_cells else "")
+        if want != state:
+            parts.append(want or _cfg.RESET)
+            state = want
+        parts.append(ch)
+    parts.append(_cfg.RESET)
+    return "".join(parts)
+
+
+def _shift_row(row: str, width: int, pad: int) -> str:
+    """Shift a row right by *pad* columns without changing its visible width.
+
+    The last visible column is pinned in place, so the box borders survive the
+    jitter instead of being cropped off the right edge.
+    """
+    plain = strip_ansi(row)
+    if len(plain) < 3 or plain == " " * len(plain):
+        return fit_text(row, width)
+
+    last = plain[-1]
+    body = crop_visible(row, len(plain) - 1)
+    body = crop_visible(body, max(0, width - pad - 1))
+    tail = f"{_cfg.GREEN_DIM}{last}{_cfg.RESET}" if last in "+|" else last
+    return fit_text(" " * pad + body, width - 1) + tail
+
+
+def apply_terminal_fx(
+    rows: List[str],
+    width: int,
+    glitch_frames: int,
+    scanline_flash: int,
+    jitter: int,
+    body_start: int = 3,
+) -> List[str]:
     if not rows:
         return rows
 
     out = list(rows)
-    if glitch_frames > 0 and len(out) > 6:
-        tear_line = random.randint(2, len(out) - 3)
-        tear = fit_text(f"{_cfg.GREEN_BRIGHT}//// SIGNAL TEAR DETECTED ////{_cfg.RESET}", width)
-        out[tear_line] = tear
+    n = len(out)
+
+    if glitch_frames > 0 and n - body_start > 4:
+        # Only tear the body area so headers, banner and footer stay readable.
+        lo = max(0, body_start)
+        hi = max(lo, n - 3)
+        tear_line = random.randint(lo, hi)
+        out[tear_line] = _glitch_row(out[tear_line], width, _TEAR_MSG)
 
     if scanline_flash > 0:
-        for i in range(2, len(out) - 2, 3):
+        for i in range(max(3, body_start), n - 2, 3):
             out[i] = f"{_cfg.GREEN_DARK}{fit_text(out[i], width)}{_cfg.RESET}"
 
     if jitter > 0:
-        pad = " " * min(2, jitter)
-        out = [fit_text(pad + line, width) for line in out]
+        pad = min(2, jitter)
+        out = [_shift_row(line, width, pad) for line in out]
 
     return out
 
@@ -213,10 +279,11 @@ def make_log_line(level: float, t: float, beat: bool) -> str:
     action = random.choice(_cfg.LOG_ACTIONS)
     target = random.choice(_cfg.ALERT_WORDS)
     strength = int(level * 100)
-    marker = "!" if beat else " "
+    marker = f"{_cfg.GREEN_BRIGHT}!{_cfg.RESET}" if beat else " "
     host = random.choice(_cfg.TARGETS)
     port = random.choice(_cfg.PORTS)
-    return f"{marker}{t:06.2f}s {action:<9} {target:<8} {host}:{port} pwr={strength:02d}%"
+    pwr = f"{_cfg.GREEN_BRIGHT}{strength:02d}%{_cfg.RESET}" if strength >= 70 else f"{strength:02d}%"
+    return f"{marker}{t:06.2f}s {action:<9} {target:<8} {host}:{port} pwr={pwr}"
 
 
 def make_incident_line(level: float, t: float, beat: bool, feed: "IncidentFeedState") -> str:  # type: ignore[name-defined]
@@ -236,11 +303,19 @@ def make_incident_line(level: float, t: float, beat: bool, feed: "IncidentFeedSt
         feed.phase = min(len(stages) - 1, feed.phase + (1 if random.random() < 0.45 or beat else 0))
         feed.ttl -= 1
 
-    severity = "CRIT" if beat or level > 0.75 else "WARN" if level > 0.45 else "INFO"
+    if beat or level > 0.75:
+        severity, sev_color = "CRIT", _cfg.STATUS_CRIT
+    elif level > 0.45:
+        severity, sev_color = "WARN", _cfg.STATUS_WARN
+    else:
+        severity, sev_color = "INFO", _cfg.GREEN_DIM
     port = random.choice(_cfg.PORTS)
-    marker = "!" if beat else " "
+    marker = f"{_cfg.GREEN_BRIGHT}!{_cfg.RESET}" if beat else " "
     stage_text = stages[feed.phase]
-    return f"{marker}{t:06.2f}s INCIDENT  {severity:<4} {feed.host}:{port} {stage_text}"
+    return (
+        f"{marker}{t:06.2f}s {_cfg.GREEN_DIM}INCIDENT{_cfg.RESET}  "
+        f"{sev_color}{severity:<4}{_cfg.RESET} {feed.host}:{port} {stage_text}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -280,56 +280,83 @@ def render_radar_sweep(
     state: Optional[VisualState] = None,
     module_level: Optional[float] = None,
 ) -> List[str]:
-    """Render a circular radar sweep visualization."""
+    """Render a circular radar sweep visualization.
+
+    The sweep is drawn by walking the beam ray instead of testing every pixel,
+    which keeps this module cheap enough to run every frame.
+    """
     lines: List[str] = []
     activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
     bar_w = max(8, width - 18)
 
     # Radar circle
-    rad = min(width // 3 - 1, height // 2 - 2, 10)
-    rad = max(3, rad)
+    rad = max(3, min(width // 3 - 1, height // 2 - 2, 10))
     cx = width // 2
     cy = (height - 2) // 2
+    grid_h = max(1, height - 2)
     sweep_angle = ((state.last_refresh * 90) % 360 if state else 0)
 
-    grid: List[List[str]] = [[" "] * width for _ in range(height - 2)]
+    grid: List[List[str]] = [[" "] * width for _ in range(grid_h)]
+    special: Dict[int, set] = {}  # row -> set of columns that carry their own colour
 
-    # Draw crosshairs
-    for y in range(min(height - 2, cy * 2)):
-        for x in range(width):
-            dx = x - cx
-            dy = y - cy
-            dist = math.sqrt(dx * dx + dy * dy)
-            if abs(dist - rad) < 0.8:
-                grid[y][x] = _cfg.GREEN_DIM + "." + _cfg.RESET
-            if abs(dx) < 0.8 and dy > -rad and dy < rad:
-                grid[y][x] = _cfg.GREEN_DIM + "|" + _cfg.RESET
-            if abs(dy) < 0.8 and dx > -rad and dx < rad:
-                grid[y][x] = _cfg.GREEN_DIM + "-" + _cfg.RESET
-            # Sweep line
-            angle_rad = math.radians(sweep_angle - 90)
-            if abs(math.atan2(dy, dx) - angle_rad) < 0.15 and dist < rad:
-                grid[y][x] = _cfg.GREEN_BRIGHT + "+" + _cfg.RESET
+    def put(x: int, y: int, ch: str, mark: bool = True) -> None:
+        if 0 <= x < width and 0 <= y < grid_h:
+            grid[y][x] = ch
+            if mark:
+                special.setdefault(y, set()).add(x)
+
+    # Crosshair (two straight lines -- no per-pixel distance maths needed)
+    for y in range(max(0, cy - rad), min(grid_h, cy + rad + 1)):
+        put(cx, y, "|", mark=False)
+    for x in range(max(0, cx - rad), min(width, cx + rad + 1)):
+        put(x, cy, "-", mark=False)
+
+    # Circle outline: solve for x from dy instead of scanning the whole grid.
+    for dy in range(-rad, rad + 1):
+        dx = int(math.sqrt(max(0.0, rad * rad - dy * dy)))
+        for x in (cx + dx, cx - dx):
+            put(x, cy + dy, ".", mark=False)
+
+    # Sweep beam with a fading trail along the ray.
+    trail = 5
+    for step in range(trail):
+        ang = math.radians(sweep_angle - 90 - step * 6.0)
+        ch = "+" if step == 0 else ("*" if step == 1 else ":")
+        ca, sa = math.cos(ang), math.sin(ang)
+        for r in range(1, rad + 1):
+            put(int(cx + r * ca), int(cy + r * sa), ch, mark=(step < 2))
 
     # Blips
     blips = state.radar_blips if state else []
+    blip_colors = {"HOSTILE": _cfg.STATUS_CRIT, "FRIENDLY": _cfg.STATUS_OK, "UNKNOWN": _cfg.STATUS_WARN}
     for angle, dist, blip_type, life in blips:
         if life <= 0:
             continue
-        bx = int(cx + dist * rad * math.cos(math.radians(angle - 90)))
-        by = int(cy + dist * rad * math.sin(math.radians(angle - 90)))
-        if 0 <= bx < width and 0 <= by < min(height - 2, cy * 2):
-            ch = "●"
-            if blip_type == "HOSTILE":
-                ch = f"{_cfg.STATUS_CRIT}●{_cfg.RESET}"
-            elif blip_type == "FRIENDLY":
-                ch = f"{_cfg.STATUS_OK}●{_cfg.RESET}"
-            elif blip_type == "UNKNOWN":
-                ch = f"{_cfg.STATUS_WARN}?{_cfg.RESET}"
-            grid[by][bx] = ch
+        ang = math.radians(angle - 90)
+        bx = int(cx + dist * rad * math.cos(ang))
+        by = int(cy + dist * rad * math.sin(ang))
+        color = blip_colors.get(blip_type)
+        if color:
+            put(bx, by, f"{color}\u25cf{_cfg.RESET}")
+        else:
+            put(bx, by, "\u25cf")
 
-    for row in grid:
-        lines.append("".join(row))
+    # Emit rows: one colour escape per plain row, per-cell only where needed.
+    dim = _cfg.GREEN_DIM
+    bright = _cfg.GREEN_BRIGHT
+    reset = _cfg.RESET
+    for y, row in enumerate(grid):
+        marks = special.get(y)
+        if marks:
+            parts: List[str] = []
+            for x, ch in enumerate(row):
+                if x in marks:
+                    parts.append(f"{bright}{ch}{reset}" if ch == "+" else ch)
+                else:
+                    parts.append(ch)
+            lines.append(dim + "".join(parts) + reset)
+        else:
+            lines.append(f"{dim}{''.join(row)}{reset}")
 
     lines.append(fit_text(f"SWEEP {meter_bar(activity, bar_w)}  BLIPS: {len(blips)}", width))
 
@@ -842,36 +869,47 @@ def render_aurora(
     activity = clamp(module_level if module_level is not None else level, 0.0, 1.0)
 
     grid: List[List[str]] = [[" "] * width for _ in range(height)]
+    row_color: List[str] = [""] * height
 
     # Aurora bands
     bands_count = 3 + int(activity * 4)
+    chars = (".", ":", "~", "-", "+", "*")
+    rand = random.random
+    rint = random.randint
+    colors = _cfg.AURORA_COLORS
+    density = activity * 0.5
     for b in range(bands_count):
-        color = random.choice(_cfg.AURORA_COLORS)
+        color = colors[b % len(colors)]
         y_base = int((b / max(1, bands_count)) * height * 0.6)
         wave_amp = 2 + int(activity * 4)
-        wave_freq = 0.2 + random.random() * 0.3
-        wave_offset = random.random() * 100
+        wave_freq = 0.2 + rand() * 0.3
+        wave_offset = rand() * 100
+        sin = math.sin
         for x in range(width):
-            y_offset = int(math.sin(x * wave_freq + wave_offset) * wave_amp)
-            y = y_base + y_offset
-            if 0 <= y < height:
-                intensity = random.random() < (activity * 0.5)
-                if intensity:
-                    ch = random.choice([".", ":", "~", "-", "+", "*"])
-                    grid[y][x] = f"{color}{ch}{_cfg.RESET}"
+            y = y_base + int(sin(x * wave_freq + wave_offset) * wave_amp)
+            if 0 <= y < height and rand() < density:
+                grid[y][x] = chars[rint(0, len(chars) - 1)]
+                if not row_color[y]:
+                    row_color[y] = color
 
     # Bright streaks on beat
     if beat:
         for _ in range(3):
-            streak_y = random.randint(0, height // 2)
-            streak_x = random.randint(0, width - 20)
-            streak_len = random.randint(10, 30)
+            streak_y = rint(0, height // 2)
+            streak_x = rint(0, max(1, width - 20))
+            streak_len = rint(10, 30)
             for dx in range(streak_len):
                 if streak_x + dx < width:
-                    grid[streak_y][streak_x + dx] = f"{_cfg.GREEN_BRIGHT}*{_cfg.RESET}"
+                    grid[streak_y][streak_x + dx] = "*"
+            row_color[streak_y] = _cfg.GREEN_BRIGHT
 
-    for row in grid:
-        lines.append("".join(row))
+    reset = _cfg.RESET
+    for y, row in enumerate(grid):
+        text = "".join(row)
+        if text.strip():
+            lines.append(f"{row_color[y] or _cfg.GREEN_DIM}{text}{reset}")
+        else:
+            lines.append(text)
 
     return lines[:height]
 

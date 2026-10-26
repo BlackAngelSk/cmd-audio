@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 import re
-from typing import List
+import unicodedata
+from typing import List, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -44,42 +45,127 @@ def normalize(vals: List[float]) -> List[float]:
 # ---------------------------------------------------------------------------
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+_ESC = "\x1b"
+
+# Terminators that end a colour state. Used when we have to clip coloured text
+# so the colour does not bleed into the rest of the line.
+_RESET = "\x1b[0m"
+
+
+_WIDE_EAW = ("W", "F")
+
+
+def char_width(ch: str) -> int:
+    """Display width of a single character (2 for East-Asian wide glyphs)."""
+    return 2 if unicodedata.east_asian_width(ch) in _WIDE_EAW else 1
+
+
+def display_width(text: str) -> int:
+    """Display width of *text* in terminal columns (assumes no ANSI escapes)."""
+    if text.isascii():
+        return len(text)
+    return sum(char_width(ch) for ch in text)
 
 
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from *text*."""
+    if _ESC not in text:
+        return text
     return _ANSI_RE.sub("", text)
 
 
 def visible_len(text: str) -> int:
-    """Return the visible length of *text* (ignoring ANSI escapes)."""
-    return len(_ANSI_RE.sub("", text))
+    """Return the visible width of *text* in columns (ignoring ANSI escapes).
+
+    Wide (CJK) glyphs count as two columns, matching what the terminal draws --
+    otherwise a single ``堡垒`` in a hostname silently shifts a whole panel.
+    """
+    if _ESC not in text:
+        return len(text) if text.isascii() else display_width(text)
+    plain = _ANSI_RE.sub("", text)
+    return len(plain) if plain.isascii() else display_width(plain)
+
+
+def _advance(text: str, i: int, budget: int) -> Tuple[int, int]:
+    """Consume characters from *text* at *i* until *budget* columns are used.
+
+    Returns ``(new_index, columns_used)``. ANSI escapes are consumed for free.
+    """
+    n = len(text)
+    used = 0
+    while i < n and used < budget:
+        if text[i] == _ESC:
+            m = _ANSI_RE.match(text, i)
+            if m:
+                i = m.end()
+                continue
+        w = 1 if text[i].isascii() else char_width(text[i])
+        if used + w > budget:
+            break
+        used += w
+        i += 1
+    return i, used
+
+
+def crop_visible(text: str, width: int) -> str:
+    """Crop *text* to at most *width* visible columns (ANSI aware, no padding).
+
+    Unlike :func:`fit_text` this never pads and never appends ``~``; it is the
+    primitive used for horizontal shifting where exact column counts matter.
+    """
+    if width <= 0:
+        return ""
+    if _ESC not in text:
+        return text[:width] if text.isascii() else text[: _advance(text, 0, width)[0]]
+
+    i, _used = _advance(text, 0, width)
+    cropped = text[:i]
+    if i < len(text):
+        cropped += _RESET
+    return cropped
 
 
 def fit_text(text: str, width: int) -> str:
     """Fit *text* to *width* columns, clipping with '~' if needed."""
     if width <= 0:
         return ""
-    if visible_len(text) <= width:
-        return text + (" " * (width - visible_len(text)))
+
+    if text.isascii():
+        if _ESC not in text:
+            n = len(text)
+            if n == width:
+                return text
+            if n < width:
+                return text + (" " * (width - n))
+            if width == 1:
+                return "~"
+            return text[: width - 1] + "~"
+
+        vis = len(_ANSI_RE.sub("", text))
+        if vis == width:
+            return text
+        if vis < width:
+            return text + (" " * (width - vis))
+        if width == 1:
+            return "~"
+
+        i, _used = _advance(text, 0, width - 1)
+        return text[:i] + "~" + _RESET
+
+    vis = visible_len(text)
+    if vis == width:
+        return text
+    if vis < width:
+        return text + (" " * (width - vis))
     if width == 1:
         return "~"
 
-    target = width - 1
-    out = ""
-    vis = 0
-    i = 0
-    while i < len(text) and vis < target:
-        if text[i] == "\x1b":
-            m = _ANSI_RE.match(text, i)
-            if m:
-                out += m.group(0)
-                i = m.end()
-                continue
-        out += text[i]
-        vis += 1
-        i += 1
-    return out + "~"
+    i, _used = _advance(text, 0, width - 1)
+    clipped = text[:i] + "~"
+    if _ESC in text:
+        # Re-close any colour state that was cut off mid-line.
+        clipped += _RESET
+    return clipped
 
 
 def center_text(text: str, width: int) -> str:

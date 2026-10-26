@@ -3,135 +3,62 @@
 Music-synced terminal hacker effect with browser-based Live Controls.
 
 Usage:
-    python3 music_sync_hacker_effect.py /path/to/song.mp3
+    ./start.sh /path/to/song.mp3 --web
+    python3 music_sync_hacker_effect.py /path/to/song.mp3 --web
     python3 music_sync_hacker_effect.py --preset chaos --diagnostics
     python3 music_sync_hacker_effect.py --replay-file frames.jsonl.gz
     python3 music_sync_hacker_effect.py --setup-ui
     python3 -m cmd_audio /path/to/song.mp3
 """
 
-import json as _json
-import os
 import sys
-import threading
 import webbrowser
 
 from cmd_audio.main import main
-from cmd_audio.control import get_browser_live_state
 
 
-def _open_live_controls_in_browser() -> None:
-    """Start a local HTTP server and open the Live Controls HTML in the default browser."""
+def _start_browser_controls(open_browser: bool = True) -> None:
+    """Serve the live-controls page from the *real* backend.
+
+    This used to spin up a throw-away static server on port 8765 that only knew
+    about /api/music and /api/config -- every slider and checkbox on the page
+    posted to /api/live, got a 404 and silently did nothing.
+    """
     try:
-        from http.server import HTTPServer, SimpleHTTPRequestHandler
+        from cmd_audio.web_server import start_web_server
+    except Exception as exc:  # pragma: no cover - import guard
+        print(f"  Live Controls unavailable: {exc}", file=sys.stderr)
+        return
 
-        project_root = os.path.dirname(os.path.abspath(__file__))
-        html_path = os.path.join(project_root, "live_controls.html")
-        if not os.path.exists(html_path):
-            return
+    try:
+        server = start_web_server(host="localhost", port=8080, live_on_root=True)
+    except Exception as exc:  # pragma: no cover - bind guard
+        print(f"  Live Controls unavailable: {exc}", file=sys.stderr)
+        return
 
-        host = "localhost"
-        port = 8765
+    if server is None or server.server is None:
+        print(
+            f"  Live Controls unavailable: {server.bind_error if server else 'unknown error'}",
+            file=sys.stderr,
+        )
+        return
 
-        class _Handler(SimpleHTTPRequestHandler):
-            def do_GET(self) -> None:
-                if self.path == "/" or self.path == "/live-controls":
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html")
-                    self.end_headers()
-                    with open(html_path, "rb") as f:
-                        self.wfile.write(f.read())
-                elif self.path.startswith("/api/"):
-                    self._handle_api()
-                else:
-                    self.send_error(404)
+    url = f"http://localhost:{server.port}"
+    print(f"\n  Live Controls: {url}\n")
 
-            def do_POST(self) -> None:
-                if self.path.startswith("/api/"):
-                    self._handle_api()
-                else:
-                    self.send_error(404)
-
-            def do_OPTIONS(self) -> None:
-                self.send_response(200)
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type")
-                self.end_headers()
-
-            def _handle_api(self) -> None:
-                """Handle /api/* requests directly using the shared live state."""
-                method = self.command
-                content_length = int(self.headers.get("Content-Length", 0))
-                body = self.rfile.read(content_length) if content_length > 0 else b""
-                data = {}
-                if body:
-                    try:
-                        data = _json.loads(body.decode())
-                    except Exception:
-                        self._send_json(400, {"status": "error", "message": "Invalid JSON"})
-                        return
-
-                live = get_browser_live_state()
-
-                # /api/music — POST {url: ...}
-                if self.path == "/api/music" and method == "POST":
-                    music_url = data.get("url", "").strip()
-                    if not music_url:
-                        self._send_json(200, {"status": "error", "message": "No URL provided"})
-                        return
-                    if live is not None:
-                        live.request_music_change(music_url)
-                        self._send_json(200, {"status": "ok", "message": "Music change requested"})
-                    else:
-                        self._send_json(200, {
-                            "status": "error",
-                            "message": "Live state not available yet – "
-                            "wait for CMD-AUDIO to finish starting.",
-                        })
-                    return
-
-                # /api/config — GET
-                if self.path == "/api/config" and method == "GET":
-                    self._send_json(200, live.to_dict() if live is not None else {})
-                    return
-
-                # /api/audio — GET
-                if self.path == "/api/audio" and method == "GET":
-                    self._send_json(200, {})
-                    return
-
-                self._send_json(404, {"status": "error", "message": "Unknown endpoint"})
-
-            def _send_json(self, status: int, data: dict) -> None:
-                payload = _json.dumps(data).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(payload)
-
-            def log_message(self, format: str, *args) -> None:
-                pass  # suppress request logging
-
-        server = HTTPServer((host, port), _Handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-
-        url = f"http://{host}:{port}"
-        print(f"  Live Controls: {url}")
-
+    if open_browser:
         try:
             webbrowser.open(url)
         except Exception:
             pass
-    except Exception:
-        pass
 
 
 if __name__ == "__main__":
-    # Open live controls in browser
-    _open_live_controls_in_browser()
+    if "--web" in sys.argv or "--setup-ui" in sys.argv:
+        # main() starts the server itself in those modes; just don't crash here.
+        pass
+    else:
+        _start_browser_controls()
 
     try:
         raise SystemExit(main())

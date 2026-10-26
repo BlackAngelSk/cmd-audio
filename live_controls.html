@@ -37,6 +37,20 @@ h1 { color: var(--accent); font-size: 28px; margin-bottom: 2px; }
 .sub { color: var(--fg2); font-size: 12px; margin-bottom: 12px; }
 .accent-line { height: 2px; background: var(--accent); margin-bottom: 16px; border-radius: 1px; }
 
+/* Controls that can only be changed when a run starts */
+.startup-only { opacity: .72; }
+.startup-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg2);
+  font-size: 10px;
+  font-weight: 400;
+  vertical-align: middle;
+}
+
 /* Tabs */
 .tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--border); margin-bottom: 0; flex-wrap: wrap; }
 .tab {
@@ -156,6 +170,11 @@ h1 { color: var(--accent); font-size: 28px; margin-bottom: 2px; }
 </style>
 </head>
 <body>
+
+<div id="conn-banner" style="display:none;background:#4b1113;border:1px solid #f85149;border-radius:6px;padding:10px 14px;margin-bottom:14px;color:#ffb3b3;font-size:12px">
+  <strong id="conn-banner-title">Not connected to CMD-AUDIO</strong>
+  <div id="conn-banner-detail" style="color:#f0a0a0;margin-top:4px"></div>
+</div>
 
 <h1>CMD-AUDIO</h1>
 <div class="sub">Live control panel — changes apply instantly</div>
@@ -500,6 +519,27 @@ h1 { color: var(--accent); font-size: 28px; margin-bottom: 2px; }
 </div>
 
 <script>
+// Controls the backend can only honour at startup. They are marked so the page
+// does not pretend to change them mid-run.
+var STARTUP_ONLY = [
+  'music_choice', 'youtube_url', 'preset_save_name', 'preset_load_name',
+  'stream_mode', 'sample_rate', 'normalize', 'web_enable', 'web_port',
+  'remote_enable', 'remote_port', 'plugin_path', 'scene_pack', 'storyboard',
+  'layered_panels', 'adaptive_fps', 'acc_mode', 'screen_reader', 'collab'
+];
+
+STARTUP_ONLY.forEach(function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('startup-only');
+  var field = el.closest('.field') || el.closest('.checkbox-row');
+  var label = field ? field.querySelector('label') : null;
+  if (label && !label.querySelector('.startup-badge')) {
+    label.insertAdjacentHTML('beforeend',
+      ' <span class="startup-badge" title="Only applied when the run starts">next start</span>');
+  }
+});
+
 // Tab switching
 document.querySelectorAll('.tab').forEach(function(tab) {
   tab.addEventListener('click', function() {
@@ -632,17 +672,70 @@ document.querySelectorAll('input, select').forEach(function(el) {
 });
 
 // Load current state from server
-(async function loadServerState() {
+// --- connection status -------------------------------------------------
+// Every backend call used to fail silently, so a dead/incorrect backend looked
+// exactly like a working one. Surface it instead.
+var connBanner = document.getElementById('conn-banner');
+var connTitle = document.getElementById('conn-banner-title');
+var connDetail = document.getElementById('conn-banner-detail');
+
+function showConnError(detail) {
+  if (!connBanner) return;
+  connTitle.textContent = 'Not connected to CMD-AUDIO — controls are inert';
+  connDetail.textContent = detail + '  (page: ' + window.location.href + ')';
+  connBanner.style.display = 'block';
+}
+
+function clearConnError() {
+  if (connBanner) connBanner.style.display = 'none';
+}
+
+function describeFetchError(path, err) {
+  var where = window.location.protocol === 'file:'
+    ? 'This page was opened from disk (file://), so /api/... has no backend. '
+      + 'Start the app with --web and open the printed http:// URL instead.'
+    : 'Request to ' + path + ' failed. Is CMD-AUDIO running with --web or --setup-ui?';
+  return where + (err && err.message ? ' [' + err.message + ']' : '');
+}
+
+// fetch a JSON API, reporting anything that goes wrong
+function apiFetch(path, options) {
+  return fetch(path, options).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + r.statusText);
+    return r.json();
+  }).then(function(d) {
+    clearConnError();
+    return d;
+  }).catch(function(e) {
+    showConnError(describeFetchError(path, e));
+    throw e;
+  });
+}
+
+async function loadServerState() {
   try {
-    var r = await fetch('/api/live-state');
-    var s = await r.json();
+    var s = await apiFetch('/api/live-state');
     if (s && !s.error) {
       // Apply server state to controls (overrides localStorage)
-      var fields = ['sensitivity','speed_min','speed_max','terminal_switch_min','terminal_switch_max','theme','theme_mode','scene_sync','ui_style','quality_mode','banner_text','banner_align','banner_anim','banner_size','terminal_mode','operation_mode','target_lock'];
-      fields.forEach(function(f) {
-        var el = document.getElementById(f);
-        if (el && s[f] !== undefined && s[f] !== null) el.value = s[f];
-        var valEl = document.getElementById(f + '_val');
+      // [server state key, element id] -- the server reports `theme_name`
+      // while the form control is called `theme`.
+      var fieldMap = [
+        ['sensitivity','sensitivity'], ['speed_min','speed_min'], ['speed_max','speed_max'],
+        ['terminal_switch_min','terminal_switch_min'], ['terminal_switch_max','terminal_switch_max'],
+        ['theme_name','theme'], ['theme_mode','theme_mode'], ['scene_sync','scene_sync'],
+        ['ui_style','ui_style'], ['quality_mode','quality_mode'],
+        ['banner_text','banner_text'], ['banner_align','banner_align'],
+        ['banner_anim','banner_anim'], ['banner_size','banner_size'],
+        ['terminal_mode','terminal_mode'], ['operation_mode','operation_mode'],
+        ['target_lock','target_lock']
+      ];
+      fieldMap.forEach(function(pair) {
+        var key = pair[0], id = pair[1];
+        var el = document.getElementById(id);
+        // never clobber a control the user is currently using
+        if (el && el === document.activeElement) return;
+        if (el && s[key] !== undefined && s[key] !== null) el.value = s[key];
+        var valEl = document.getElementById(id + '_val');
         if (valEl && el && el.type === 'range') valEl.textContent = parseFloat(el.value).toFixed(2);
       });
       var bools = ['show_banner','unicode_bars','lock_scene','alert_tones','mission_timeline','defender_ai','audio_fx','paused'];
@@ -655,52 +748,57 @@ document.querySelectorAll('input, select').forEach(function(el) {
         if (mc) mc.textContent = s.music_file;
       }
     }
-  } catch(e) {}
-})();
+  } catch(e) {
+    // error already shown by apiFetch
+  }
+}
+
+// Initial load, then keep in sync with the terminal (keyboard changes there
+// must show up here too).
+loadServerState();
+setInterval(loadServerState, 2000);
 
 // Live settings sync - send changes to server
 function sendLiveSettings(patch) {
-  fetch('/api/live', {
+  apiFetch('/api/live', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(patch)
-  }).catch(function(e) { console.warn('Live settings sync failed:', e); });
+  }).then(function(d) {
+    // The backend reports what it took; anything else it did not understand.
+    if (d && d.ignored && d.ignored.length) {
+      console.warn('Live settings ignored by the backend:', d.ignored);
+    }
+  }).catch(function(e) {
+    console.warn('Live settings sync failed:', e);
+  });
+}
+
+function sendIfLive(el, value) {
+  if (STARTUP_ONLY.indexOf(el.id) !== -1) return;  // cannot change mid-run
+  var patch = {};
+  patch[el.id] = value;
+  sendLiveSettings(patch);
 }
 
 // Sliders: send on input (continuous)
 document.querySelectorAll('input[type=range]').forEach(function(el) {
-  el.addEventListener('input', function() {
-    var patch = {};
-    patch[el.id] = parseFloat(el.value);
-    sendLiveSettings(patch);
-  });
+  el.addEventListener('input', function() { sendIfLive(el, parseFloat(el.value)); });
 });
 
 // Selects: send on change
 document.querySelectorAll('select').forEach(function(el) {
-  el.addEventListener('change', function() {
-    var patch = {};
-    patch[el.id] = el.value;
-    sendLiveSettings(patch);
-  });
+  el.addEventListener('change', function() { sendIfLive(el, el.value); });
 });
 
 // Checkboxes: send on change
 document.querySelectorAll('input[type=checkbox]').forEach(function(el) {
-  el.addEventListener('change', function() {
-    var patch = {};
-    patch[el.id] = el.checked;
-    sendLiveSettings(patch);
-  });
+  el.addEventListener('change', function() { sendIfLive(el, el.checked); });
 });
 
 // Text inputs: send on change (not input, to avoid flooding)
 document.querySelectorAll('input[type=text]').forEach(function(el) {
-  el.addEventListener('change', function() {
-    var patch = {};
-    patch[el.id] = el.value;
-    sendLiveSettings(patch);
-  });
+  el.addEventListener('change', function() { sendIfLive(el, el.value); });
 });
 </script>
 </body>
