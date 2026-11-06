@@ -3,691 +3,1235 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23070a0d'/%3E%3Crect x='4' y='7' width='2' height='5' fill='%2326ffa5'/%3E%3Crect x='7' y='4' width='2' height='8' fill='%2326ffa5'/%3E%3Crect x='10' y='6' width='2' height='6' fill='%2326ffa5'/%3E%3C/svg%3E">
 <title>CMD-AUDIO  //  Live Controls</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-  --bg: #0d1117;
-  --bg2: #161b22;
-  --bg3: #1c2128;
-  --fg: #c9d1d9;
-  --fg2: #8b949e;
-  --accent: #00ff9f;
-  --accent2: #00cc7f;
-  --border: #30363d;
-  --btn: #238636;
-  --btn2: #2ea043;
-  --stop: #da3633;
-  --stop2: #f85149;
+  --accent: #26ffa5;
+  --bg: #070a0d;
+  --bg-soft: #0a0f14;
+  --panel: #0d141a;
+  --panel-2: #121b23;
+  --line: rgba(255, 255, 255, .06);
+  --line-strong: rgba(255, 255, 255, .13);
+  --fg: #dbe5ee;
+  --fg-dim: #8394a3;
+  --fg-faint: #5a6876;
+  --track: #1b2731;
+  --danger: #ff5a5a;
+  --radius: 14px;
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
 }
+
+* { box-sizing: border-box; }
+
+html { color-scheme: dark; }
 
 body {
-  background: var(--bg);
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 460px at 8% -12%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
+    radial-gradient(760px 420px at 102% -4%, rgba(84, 122, 255, .08), transparent 70%),
+    var(--bg);
   color: var(--fg);
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 13px;
   line-height: 1.5;
-  padding: 20px 30px;
-  max-width: 900px;
-  margin: 0 auto;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1 { color: var(--accent); font-size: 28px; margin-bottom: 2px; }
-.sub { color: var(--fg2); font-size: 12px; margin-bottom: 12px; }
-.accent-line { height: 2px; background: var(--accent); margin-bottom: 16px; border-radius: 1px; }
-
-/* Controls that can only be changed when a run starts */
-.startup-only { opacity: .72; }
-.startup-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--fg2);
-  font-size: 10px;
-  font-weight: 400;
-  vertical-align: middle;
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 42px);
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 25%, transparent 80%);
 }
 
-/* Tabs */
-.tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--border); margin-bottom: 0; flex-wrap: wrap; }
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: #fff; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e2a35; border-radius: 6px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #2b3a48; }
+
+/* ---------------------------------------------------------------- shell */
+.app {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 238px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px 14px 16px;
+  border-right: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .022), transparent 42%);
+  backdrop-filter: blur(8px);
+}
+
+.brand { display: flex; align-items: center; gap: 11px; padding: 0 8px; }
+
+.logo {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: 0 0 18px -6px var(--accent);
+  flex: none;
+}
+.logo i {
+  flex: 1;
+  border-radius: 1px;
+  background: var(--accent);
+  height: 35%;
+  animation: eq 1.5s ease-in-out infinite;
+}
+.logo i:nth-child(2) { animation-delay: .18s; height: 78%; }
+.logo i:nth-child(3) { animation-delay: .36s; height: 52%; }
+.logo i:nth-child(4) { animation-delay: .54s; height: 92%; }
+@keyframes eq { 0%, 100% { height: 26%; opacity: .65; } 50% { height: 96%; opacity: 1; } }
+
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-text strong { font-size: 13px; letter-spacing: .16em; font-weight: 700; }
+.brand-text span { font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--fg-faint); }
+
+/* ---------------------------------------------------------------- nav */
+.tabs { display: flex; flex-direction: column; gap: 3px; }
+
 .tab {
-  padding: 8px 16px;
-  background: var(--bg2);
-  color: var(--fg2);
-  cursor: pointer;
-  border: none;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 6px 6px 0 0;
-  transition: all .15s;
-}
-.tab:hover { background: var(--bg3); color: var(--fg); }
-.tab.active { background: var(--bg3); color: var(--accent); border-bottom: 2px solid var(--accent); }
-
-.panel {
-  display: none;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 0 0 8px 8px;
-  padding: 20px;
-  margin-bottom: 16px;
-}
-.panel.active { display: block; }
-
-/* Fields */
-.field { display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; margin-bottom: 8px; }
-.field label { color: var(--fg); font-size: 12px; font-weight: 600; }
-.field input, .field select {
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-family: inherit;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
 }
-.field input:focus, .field select:focus {
-  border-color: var(--accent);
-  outline: none;
-  box-shadow: 0 0 0 1px var(--accent2);
+.tab svg { width: 15px; height: 15px; flex: none; opacity: .85; }
+.tab .key {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--fg-faint);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 15px;
 }
-.field select { cursor: pointer; }
+.tab:hover { background: rgba(255, 255, 255, .035); color: var(--fg); }
+.tab.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tab.active svg { opacity: 1; }
+.tab.active .key { color: color-mix(in srgb, var(--accent) 70%, transparent); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
 
-/* Checkboxes */
-.checkbox-row { display: flex; flex-wrap: wrap; gap: 16px; margin: 8px 0; }
-.checkbox-row label { display: flex; align-items: center; gap: 6px; color: var(--fg); font-size: 12px; cursor: pointer; }
-.checkbox-row input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
 
-/* Sliders */
-.field input[type=range] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--border);
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, .02);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.pill .dot {
+  width: 6px;
   height: 6px;
-  border-radius: 3px;
-  outline: none;
-  border: none;
-  padding: 0;
+  border-radius: 50%;
+  background: var(--fg-faint);
+  flex: none;
 }
-.field input[type=range]::-webkit-slider-thumb {
+.pill.live { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 32%, transparent); }
+.pill.live .dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); animation: pulse 2s ease-in-out infinite; }
+.pill.down { color: #ff9b9b; border-color: rgba(255, 90, 90, .38); }
+.pill.down .dot { background: var(--danger); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.side-note { font-size: 10.5px; line-height: 1.6; color: var(--fg-faint); }
+.side-note b { color: var(--fg-dim); font-weight: 600; }
+
+/* ---------------------------------------------------------------- main */
+.main {
+  min-width: 0;
+  padding: 22px 30px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.wrap { max-width: 1120px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; flex: 1; }
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.topbar h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; font-weight: 600; }
+.topbar p { margin: 3px 0 0; font-size: 11.5px; color: var(--fg-faint); }
+
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s, transform .08s;
+}
+.btn:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.btn.primary {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: transparent;
+  color: #04140d;
+}
+.btn.primary:hover { color: #04140d; filter: brightness(1.08); }
+.btn.danger { color: #ff9b9b; border-color: rgba(255, 90, 90, .32); background: rgba(255, 90, 90, .06); }
+.btn.danger:hover { color: #ffd0d0; background: rgba(255, 90, 90, .14); border-color: rgba(255, 90, 90, .5); }
+.btn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* ------------------------------------------------------------ now playing */
+.np {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 18px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 45%),
+    var(--panel);
+  position: relative;
+  overflow: hidden;
+}
+.np::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 55%, transparent), transparent);
+}
+
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 32px; width: 34px; flex: none; }
+.eq i { flex: 1; background: color-mix(in srgb, var(--accent) 70%, transparent); border-radius: 1px; animation: eq 1.1s ease-in-out infinite; }
+.eq i:nth-child(1) { animation-delay: -.2s; }
+.eq i:nth-child(2) { animation-delay: -.55s; height: 60%; }
+.eq i:nth-child(3) { animation-delay: -.8s; }
+.eq i:nth-child(4) { animation-delay: -.35s; height: 45%; }
+.eq i:nth-child(5) { animation-delay: -.65s; }
+
+.np-main { min-width: 0; flex: 1; }
+.eyebrow { font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--fg-faint); }
+.np-title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-sub { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.np-stats { display: flex; gap: 22px; padding-left: 18px; border-left: 1px solid var(--line); flex: none; }
+.np-stats div { display: flex; flex-direction: column; align-items: flex-start; }
+.np-stats b { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
+.np-stats b.warn { color: #ffcf6a; }
+.np-stats span { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-faint); }
+
+/* ---------------------------------------------------------------- panels */
+.panel { display: none; }
+.panel.active { display: block; animation: fade .22s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(318px, 1fr)); gap: 14px; }
+.grid.single { grid-template-columns: minmax(320px, 620px); }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 15px 17px 13px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 30%, transparent), transparent);
+  opacity: .6;
+}
+.card > h3 {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+.card > .hint { margin: 4px 0 12px; font-size: 11px; line-height: 1.5; color: var(--fg-faint); }
+
+/* ---------------------------------------------------------------- fields */
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px dashed rgba(255, 255, 255, .055);
+}
+.field:first-of-type { border-top: none; }
+.field > label { font-size: 12px; font-weight: 500; color: var(--fg); }
+.field > .val {
+  justify-self: end;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 6px;
+  padding: 0 7px;
+  line-height: 18px;
+}
+.field > .wide, .field > input, .field > select { grid-column: 1 / -1; }
+.field > .readout {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.field > .state {
+  justify-self: end;
+  font-size: 11px;
+  color: var(--fg-dim);
+  letter-spacing: .04em;
+}
+.field > .state.on { color: var(--accent); }
+
+input[type=text], select {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background-color: var(--bg-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  transition: border-color .15s, box-shadow .15s;
+}
+input[type=text]::placeholder { color: #465461; }
+input[type=text]:focus, select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--fg-dim) 50%),
+    linear-gradient(135deg, var(--fg-dim) 50%, transparent 50%);
+  background-position: calc(100% - 16px) calc(50% + 1px), calc(100% - 11px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+select option { background: var(--panel-2); color: var(--fg); }
+input[type=text]::-webkit-calendar-picker-indicator { filter: invert(.6); }
+
+/* sliders */
+input[type=range] {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 4px;
+  margin: 3px 0 1px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent) var(--p, 50%), var(--track) var(--p, 50%));
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--accent);
-  cursor: pointer;
+  border: none;
+  cursor: grab;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 14px -2px var(--accent);
+  transition: box-shadow .15s, transform .12s;
 }
-.field input[type=range]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.12); }
+input[type=range]:active::-webkit-slider-thumb { cursor: grabbing; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent); }
+input[type=range]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
   border-radius: 50%;
   background: var(--accent);
-  cursor: pointer;
-  border: none;
+  cursor: grab;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.slider-label { font-size: 11px; color: var(--accent); min-width: 50px; text-align: right; }
+input[type=range]:focus-visible { outline: none; }
+input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 26%, transparent); }
 
-/* Buttons */
-.btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
-.btn {
-  padding: 10px 28px;
-  border: none;
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
+/* switches */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 0;
+  border-top: 1px dashed rgba(255, 255, 255, .055);
+  font-size: 12px;
+  color: var(--fg);
   cursor: pointer;
-  transition: all .15s;
+  user-select: none;
 }
-.btn-start { background: var(--btn); color: #fff; }
-.btn-start:hover { background: var(--btn2); }
-.btn-stop { background: var(--stop); color: #fff; }
-.btn-stop:hover { background: var(--stop2); }
-.btn-browse { background: var(--bg3); color: var(--accent); border: 1px solid var(--border); font-size: 12px; padding: 6px 14px; }
-.btn-browse:hover { background: #1a2332; color: #fff; }
+.switch:first-of-type { border-top: none; }
+.switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  clip-path: inset(50%);
+}
+.switch .track {
+  position: relative;
+  width: 34px;
+  height: 19px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--track);
+  transition: background .18s, border-color .18s;
+}
+.switch .track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #6b7b89;
+  transition: transform .18s cubic-bezier(.4, 1.4, .6, 1), background .18s;
+}
+.switch input:checked + .track {
+  background: color-mix(in srgb, var(--accent) 82%, #000);
+  border-color: transparent;
+}
+.switch input:checked + .track::after { transform: translateX(15px); background: #05140e; }
+.switch input:focus-visible + .track { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.switch .txt { padding-top: 1px; }
+.switch:hover .track { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
-/* Status */
-.status-bar {
-  margin-top: 16px;
-  padding: 12px 16px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+/* swatches */
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 4px; }
+.swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: var(--sw);
+  cursor: pointer;
+  position: relative;
+  transition: transform .12s, box-shadow .15s;
+}
+.swatch:hover { transform: translateY(-2px); }
+.swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--sw); }
+
+/* theme preview strip */
+.pv {
+  margin-top: 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 11px 12px 9px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .025), transparent);
+  overflow: hidden;
+}
+.pv-bars { display: flex; align-items: flex-end; gap: 3px; flex: 1; min-height: 56px; margin-bottom: 9px; }
+.pv-bars i {
+  flex: 1;
+  height: var(--h, 50%);
+  border-radius: 1px;
+  transform-origin: bottom;
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 25%, transparent));
+  opacity: .8;
+  animation: pvbar 1.9s ease-in-out infinite;
+}
+@keyframes pvbar { 0%, 100% { transform: scaleY(.45); opacity: .55; } 50% { transform: scaleY(1); opacity: .95; } }
+.pv-bars i:nth-child(2n) { animation-delay: -.45s; }
+.pv-bars i:nth-child(3n) { animation-delay: -.9s; }
+.pv-bars i:nth-child(5n) { animation-delay: -1.3s; }
+.pv-line { font-size: 10px; color: var(--fg-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-line b { color: color-mix(in srgb, var(--accent) 75%, #fff); font-weight: 500; }
+
+/* banner preview */
+.bp {
+  margin-top: 14px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-height: 66px;
+  padding: 14px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .025), transparent);
+  overflow: hidden;
+}
+.bp > span {
   font-size: 11px;
-  color: var(--fg2);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--accent) 82%, #fff);
 }
-.status-bar .live { color: var(--accent); font-weight: 700; }
-.status-bar .warn { color: #f0ad4e; font-weight: 600; }
+.bp.al-left { justify-content: flex-start; }
+.bp.al-center { justify-content: center; }
+.bp.al-right { justify-content: flex-end; }
+.bp.hidden > span { color: var(--fg-faint); }
+.bp.an-pulse > span { animation: bppulse 1.7s ease-in-out infinite; }
+.bp.an-scroll > span { animation: bpscroll 7s linear infinite; }
+@keyframes bppulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes bpscroll { from { transform: translateX(35%); } to { transform: translateX(-105%); } }
 
-/* Misc */
-.section-divider { height: 1px; background: var(--border); margin: 12px 0; }
+/* action row inside a card */
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0 12px; }
+
+/* divider */
+.divider { height: 1px; background: var(--line); margin: 14px 0; }
+
+/* ---------------------------------------------------------------- status */
+.conn {
+  display: none;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 90, 90, .34);
+  background: rgba(255, 90, 90, .07);
+  font-size: 11.5px;
+  color: #ffc3c3;
+}
+.conn.show { display: flex; }
+.conn strong { display: block; color: #ffdede; font-size: 12px; margin-bottom: 2px; }
+.conn .detail { color: #e9a3a3; line-height: 1.5; overflow-wrap: anywhere; }
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+}
+.foot kbd {
+  font: inherit;
+  font-size: 10px;
+  color: var(--fg-dim);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: 0 1px;
+}
+
+/* ---------------------------------------------------------------- toasts */
+#toasts {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 330px;
+}
+.toast {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  border-left: 2px solid var(--accent);
+  background: var(--panel-2);
+  color: var(--fg);
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 20px 45px -18px #000;
+  animation: pop .2s ease;
+}
+.toast.warn { border-left-color: #ffb454; color: #ffdca8; }
+.toast.bad { border-left-color: var(--danger); color: #ffc3c3; }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* ---------------------------------------------------------------- narrow */
+@media (max-width: 880px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 14px 14px 10px;
+    gap: 12px;
+  }
+  .tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 5px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { width: auto; white-space: nowrap; }
+  .tab .key { display: none; }
+  .side-foot { flex-direction: row; align-items: center; gap: 12px; }
+  .side-note { display: none; }
+  .main { padding: 16px 15px 34px; }
+  .np { flex-wrap: wrap; }
+  .np-stats { width: 100%; padding-left: 0; padding-top: 10px; border-left: none; border-top: 1px solid var(--line); justify-content: space-between; gap: 10px; }
+  .topbar h1 { font-size: 19px; }
+}
 </style>
 </head>
 <body>
 
-<div id="conn-banner" style="display:none;background:#4b1113;border:1px solid #f85149;border-radius:6px;padding:10px 14px;margin-bottom:14px;color:#ffb3b3;font-size:12px">
-  <strong id="conn-banner-title">Not connected to CMD-AUDIO</strong>
-  <div id="conn-banner-detail" style="color:#f0a0a0;margin-top:4px"></div>
+<div class="app">
+  <!-- ------------------------------------------------------- sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="brand-text"><strong>CMD-AUDIO</strong><span>control surface</span></span>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-panel="playback" data-title="Playback" data-sub="How hard the render reacts to the track">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5.5 3.6l6.4 4.4-6.4 4.4z"/></svg>
+        <span>Playback</span><span class="key">1</span>
+      </button>
+      <button class="tab" data-panel="visual" data-title="Visual" data-sub="Palette, quality and render style">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 2.2v2.4M8 11.4v2.4M2.2 8h2.4M11.4 8h2.4M4 4l1.6 1.6M10.4 10.4L12 12M12 4l-1.6 1.6M5.6 10.4L4 12"/></svg>
+        <span>Visual</span><span class="key">2</span>
+      </button>
+      <button class="tab" data-panel="terminal" data-title="Terminal" data-sub="Persona, operation and target">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.2l3.4 3.8L3 11.8M8.6 11.8H13"/></svg>
+        <span>Terminal</span><span class="key">3</span>
+      </button>
+      <button class="tab" data-panel="banner" data-title="Banner" data-sub="The headline row over the render">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.3" y="4.4" width="11.4" height="7.2" rx="1.6"/><path d="M5 8h6"/></svg>
+        <span>Banner</span><span class="key">4</span>
+      </button>
+      <button class="tab" data-panel="music" data-title="Music" data-sub="Swap the track without restarting">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6.6 11.6V4.9L12.2 3.4v6.6"/><circle cx="4.7" cy="12.1" r="1.9"/><circle cx="10.3" cy="10.7" r="1.9"/></svg>
+        <span>Music</span><span class="key">5</span>
+      </button>
+      <button class="tab" data-panel="features" data-title="Features" data-sub="Mission, defender and audio effects">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.3" y="5" width="11.4" height="6" rx="3"/><circle cx="5.6" cy="8" r="1.7" fill="currentColor" stroke="none"/></svg>
+        <span>Features</span><span class="key">6</span>
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <span class="pill" id="conn-pill"><span class="dot"></span><span id="conn-text">connecting</span></span>
+      <div class="side-note">
+        Changes apply on the next frame.<br>
+        Ports, plugins and capture source are <b>launch flags</b> — see <b>./start.sh --help</b>.
+      </div>
+    </div>
+  </aside>
+
+  <!-- ---------------------------------------------------------- main -->
+  <main class="main">
+    <div class="wrap">
+
+      <header class="topbar">
+        <div>
+          <h1 id="view-title">Playback</h1>
+          <p id="view-sub">How hard the render reacts to the track</p>
+        </div>
+        <div class="actions">
+          <button class="btn" id="pause-btn" onclick="togglePause()" title="Toggle pause (p in terminal)">
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><rect x="4" y="3" width="3" height="10" rx="1"/><rect x="9" y="3" width="3" height="10" rx="1"/></svg>
+            <span id="pause-label">Pause</span>
+          </button>
+          <button class="btn danger" onclick="stopConsole()" title="Stop the running render">
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg>
+            Stop console
+          </button>
+        </div>
+      </header>
+
+      <div class="conn" id="conn-banner" role="alert">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" style="flex:none;margin-top:1px"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11.2v.1" stroke-linecap="round"/></svg>
+        <div>
+          <strong id="conn-banner-title">Not connected to CMD-AUDIO</strong>
+          <div class="detail" id="conn-banner-detail"></div>
+        </div>
+      </div>
+
+      <!-- now playing -->
+      <section class="np">
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <div class="np-main">
+          <div class="eyebrow">Now playing</div>
+          <div class="np-title" id="np-title">—</div>
+          <div class="np-sub" id="np-sub">waiting for the render loop…</div>
+        </div>
+        <div class="np-stats">
+          <div><b id="np-theme">—</b><span>theme</span></div>
+          <div><b id="np-sens">—</b><span>sensitivity</span></div>
+          <div><b id="frame_drops_val">0</b><span>frame drops</span></div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- playback -->
+      <div class="panel active" id="playback">
+        <div class="grid">
+          <div class="stack">
+            <div class="card">
+              <h3>Audio response</h3>
+              <p class="hint">How far the bars push on a loud frame.</p>
+              <div class="field">
+                <label for="sensitivity">Sensitivity</label>
+                <span class="val" id="sensitivity_val">1.00</span>
+                <input type="range" id="sensitivity" min="0.1" max="4.0" step="0.05" value="1.0">
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Session</h3>
+              <p class="hint">Pausing freezes the render but keeps the audio clock running.</p>
+              <label class="switch">
+                <input type="checkbox" id="paused">
+                <span class="track"></span>
+                <span class="txt">Pause render</span>
+              </label>
+              <div class="field">
+                <label>Scene</label>
+                <span class="state" id="sess-scene">scrolling</span>
+              </div>
+              <div class="field">
+                <label>Theme mode</label>
+                <span class="state" id="sess-mode">manual</span>
+              </div>
+              <div class="field">
+                <label>Bars</label>
+                <span class="state" id="sess-bars">ascii</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Scene pacing</h3>
+            <p class="hint">Speed of the animation and how long a scene holds.</p>
+            <div class="field">
+              <label for="speed_min">Speed min</label>
+              <span class="val" id="speed_min_val">0.25</span>
+              <input type="range" id="speed_min" min="0.05" max="3.0" step="0.05" value="0.25">
+            </div>
+            <div class="field">
+              <label for="speed_max">Speed max</label>
+              <span class="val" id="speed_max_val">3.00</span>
+              <input type="range" id="speed_max" min="0.5" max="6.0" step="0.1" value="3.0">
+            </div>
+            <div class="field">
+              <label for="terminal_switch_min">Switch min</label>
+              <span class="val" id="terminal_switch_min_val">4.0</span>
+              <input type="range" id="terminal_switch_min" min="0.5" max="20.0" step="0.5" value="4.0">
+            </div>
+            <div class="field">
+              <label for="terminal_switch_max">Switch max</label>
+              <span class="val" id="terminal_switch_max_val">11.0</span>
+              <input type="range" id="terminal_switch_max" min="1.0" max="60.0" step="0.5" value="11.0">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------------------------------------------------------ visual -->
+      <div class="panel" id="visual">
+        <div class="grid">
+          <div class="card">
+            <h3>Palette</h3>
+            <p class="hint">The accent follows the theme, here and in the terminal.</p>
+            <div class="field">
+              <label for="theme">Theme</label>
+              <select id="theme">
+                <option value="matrix">matrix</option>
+                <option value="red-alert">red-alert</option>
+                <option value="ice">ice</option>
+                <option value="amber">amber</option>
+                <option value="neon">neon</option>
+                <option value="plasma">plasma</option>
+                <option value="ghost">ghost</option>
+                <option value="magma">magma</option>
+                <option value="storm">storm</option>
+                <option value="twilight">twilight</option>
+              </select>
+            </div>
+            <div class="swatches" id="swatches">
+              <button type="button" class="swatch" data-theme="matrix" style="--sw:#26ffa5" title="matrix"></button>
+              <button type="button" class="swatch" data-theme="red-alert" style="--sw:#ff4f4f" title="red-alert"></button>
+              <button type="button" class="swatch" data-theme="ice" style="--sw:#63d3ff" title="ice"></button>
+              <button type="button" class="swatch" data-theme="amber" style="--sw:#ffb454" title="amber"></button>
+              <button type="button" class="swatch" data-theme="neon" style="--sw:#ff5cd6" title="neon"></button>
+              <button type="button" class="swatch" data-theme="plasma" style="--sw:#8f7bff" title="plasma"></button>
+              <button type="button" class="swatch" data-theme="ghost" style="--sw:#c9d6e2" title="ghost"></button>
+              <button type="button" class="swatch" data-theme="magma" style="--sw:#ff7a3d" title="magma"></button>
+              <button type="button" class="swatch" data-theme="storm" style="--sw:#6ea8ff" title="storm"></button>
+              <button type="button" class="swatch" data-theme="twilight" style="--sw:#a97bff" title="twilight"></button>
+            </div>
+            <div class="pv" aria-hidden="true">
+              <div class="pv-bars">
+                <i style="--h:34%"></i><i style="--h:62%"></i><i style="--h:48%"></i><i style="--h:88%"></i>
+                <i style="--h:56%"></i><i style="--h:72%"></i><i style="--h:40%"></i><i style="--h:96%"></i>
+                <i style="--h:66%"></i><i style="--h:44%"></i><i style="--h:78%"></i><i style="--h:52%"></i>
+                <i style="--h:90%"></i><i style="--h:38%"></i>
+              </div>
+              <div class="pv-line">root@localhost:~# <b>nmap -sV corp-gw</b></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Look</h3>
+            <p class="hint">Theme automation, density and frame budget.</p>
+            <div class="field">
+              <label for="theme_mode">Theme mode</label>
+              <select id="theme_mode">
+                <option value="manual">manual</option>
+                <option value="bass">bass</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ui_style">UI style</label>
+              <select id="ui_style">
+                <option value="full">full</option>
+                <option value="minimal">minimal</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="quality_mode">Quality</label>
+              <select id="quality_mode">
+                <option value="auto">auto</option>
+                <option value="off">off</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="scene_sync">Scene sync</label>
+              <select id="scene_sync">
+                <option value="adaptive">adaptive</option>
+                <option value="bpm">bpm</option>
+                <option value="hybrid">hybrid</option>
+              </select>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="unicode_bars">
+              <span class="track"></span>
+              <span class="txt">Unicode bars</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------------------------------------------------- terminal -->
+      <div class="panel" id="terminal">
+        <div class="grid single">
+          <div class="card">
+            <h3>Persona &amp; operation</h3>
+            <p class="hint">The prompt and command set the terminal types out, and the framing the scene narrates.</p>
+            <div class="field">
+              <label for="terminal_mode">Terminal profile</label>
+              <select id="terminal_mode">
+                <option value="netrunner">netrunner</option>
+                <option value="forensics">forensics</option>
+                <option value="industrial">industrial</option>
+                <option value="crypto-lab">crypto-lab</option>
+                <option value="black-ice">black-ice</option>
+                <option value="file-exfil">file-exfil</option>
+                <option value="port-scan">port-scan</option>
+                <option value="firewall-breach">firewall-breach</option>
+                <option value="encrypt-crack">encrypt-crack</option>
+                <option value="admin-hunt">admin-hunt</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="operation_mode">Operation mode</label>
+              <select id="operation_mode">
+                <option value="BREACH">BREACH</option>
+                <option value="RECON">RECON</option>
+                <option value="SPOOF">SPOOF</option>
+                <option value="EXFIL">EXFIL</option>
+                <option value="BACKDOOR">BACKDOOR</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="target_lock">Target lock</label>
+              <select id="target_lock">
+                <option value="corp-gw">corp-gw</option>
+                <option value="bank-node">bank-node</option>
+                <option value="sat-relay">sat-relay</option>
+                <option value="cdn-edge">cdn-edge</option>
+                <option value="sec-ops">sec-ops</option>
+                <option value="mail-spool">mail-spool</option>
+                <option value="black-ice">black-ice</option>
+              </select>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="lock_scene">
+              <span class="track"></span>
+              <span class="txt">Lock scene (stop switching)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------------------------------------------------------ banner -->
+      <div class="panel" id="banner">
+        <div class="grid">
+          <div class="card">
+            <h3>Banner row</h3>
+            <p class="hint">A single line drawn above the render — the song title, a handle, a warning.</p>
+            <label class="switch">
+              <input type="checkbox" id="show_banner">
+              <span class="track"></span>
+              <span class="txt">Show banner</span>
+            </label>
+            <div class="field">
+              <label for="banner_text">Banner text</label>
+              <input type="text" id="banner_text" maxlength="120" placeholder="Enter banner text…">
+            </div>
+            <div class="bp al-center" id="banner-preview" aria-hidden="true">
+              <span id="bp-text">banner preview</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Placement</h3>
+            <p class="hint">Position, motion and weight of the banner row.</p>
+            <div class="field">
+              <label for="banner_align">Align</label>
+              <select id="banner_align">
+                <option value="left">left</option>
+                <option value="center">center</option>
+                <option value="right">right</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="banner_anim">Animation</label>
+              <select id="banner_anim">
+                <option value="off">off</option>
+                <option value="scroll">scroll</option>
+                <option value="pulse">pulse</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="banner_size">Size</label>
+              <select id="banner_size">
+                <option value="normal">normal</option>
+                <option value="large">large</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------------------------------------------------------- music -->
+      <div class="panel" id="music">
+        <div class="grid">
+          <div class="card">
+            <h3>Current track</h3>
+            <p class="hint">Read back from the running render.</p>
+            <div class="field">
+              <label>Song</label>
+              <span class="readout" id="music_current_val">(none)</span>
+            </div>
+            <div class="field">
+              <label>Status</label>
+              <span class="readout" id="music_status_val">—</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Local file</h3>
+            <p class="hint">Absolute path on the machine running CMD-AUDIO. Applies immediately.</p>
+            <div class="field">
+              <label for="music_choice">Audio file</label>
+              <input type="text" id="music_choice" placeholder="/path/to/song.mp3">
+            </div>
+            <div class="row-actions">
+              <button type="button" class="btn primary" onclick="loadMusicFile()">Load file</button>
+              <button type="button" class="btn" onclick="browseMusicFile()">Browse…</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>YouTube</h3>
+            <p class="hint">Downloads the audio with yt-dlp, then switches the track.</p>
+            <div class="field">
+              <label for="youtube_url">Video URL</label>
+              <input type="text" id="youtube_url" placeholder="https://youtube.com/watch?v=…">
+            </div>
+            <div class="row-actions">
+              <button type="button" class="btn primary" onclick="loadYouTube()">Load YouTube</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------------------------------------------------- features -->
+      <div class="panel" id="features">
+        <div class="grid">
+          <div class="card">
+            <h3>Narrative</h3>
+            <p class="hint">Mission beats and the defender that reacts to them.</p>
+            <label class="switch">
+              <input type="checkbox" id="mission_timeline">
+              <span class="track"></span>
+              <span class="txt">Mission timeline</span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="defender_ai">
+              <span class="track"></span>
+              <span class="txt">Defender AI</span>
+            </label>
+          </div>
+
+          <div class="card">
+            <h3>Audio</h3>
+            <p class="hint">Sounds layered on top of the track you are playing.</p>
+            <label class="switch">
+              <input type="checkbox" id="alert_tones">
+              <span class="track"></span>
+              <span class="txt">Alert tones</span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="audio_fx">
+              <span class="track"></span>
+              <span class="txt">Audio FX</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <span>
+          Terminal keys still work and mirror here — <kbd>p</kbd> pause · <kbd>t</kbd> theme · <kbd>b</kbd> banner · <kbd>r</kbd> randomize · <kbd>q</kbd> quit
+        </span>
+        <span id="sync-note">connecting…</span>
+      </div>
+
+    </div>
+  </main>
 </div>
 
-<h1>CMD-AUDIO</h1>
-<div class="sub">Live control panel — changes apply instantly</div>
-<div class="accent-line"></div>
-
-<div class="tabs" id="tabs">
-  <button class="tab active" data-panel="playback">Playback</button>
-  <button class="tab" data-panel="visual">Visual</button>
-  <button class="tab" data-panel="terminal">Terminal</button>
-  <button class="tab" data-panel="banner">Banner</button>
-  <button class="tab" data-panel="music">Music</button>
-  <button class="tab" data-panel="features">Features</button>
-  <button class="tab" data-panel="streaming">Streaming</button>
-  <button class="tab" data-panel="plugins">Plugins</button>
-  <button class="tab" data-panel="scene">Scene</button>
-  <button class="tab" data-panel="access">Access</button>
-</div>
-
-<!-- Playback -->
-<div class="panel active" id="playback">
-  <div class="field">
-    <label>Sensitivity</label>
-    <input type="range" id="sensitivity" min="0.1" max="4.0" step="0.05" value="1.0">
-    <span class="slider-label" id="sensitivity_val">1.00</span>
-  </div>
-  <div class="field">
-    <label>Speed Min</label>
-    <input type="range" id="speed_min" min="0.05" max="3.0" step="0.05" value="0.25">
-    <span class="slider-label" id="speed_min_val">0.25</span>
-  </div>
-  <div class="field">
-    <label>Speed Max</label>
-    <input type="range" id="speed_max" min="0.5" max="6.0" step="0.1" value="3.0">
-    <span class="slider-label" id="speed_max_val">3.00</span>
-  </div>
-  <div class="field">
-    <label>Switch Min (s)</label>
-    <input type="range" id="terminal_switch_min" min="0.5" max="20.0" step="0.5" value="4.0">
-    <span class="slider-label" id="terminal_switch_min_val">4.0</span>
-  </div>
-  <div class="field">
-    <label>Switch Max (s)</label>
-    <input type="range" id="terminal_switch_max" min="1.0" max="60.0" step="0.5" value="11.0">
-    <span class="slider-label" id="terminal_switch_max_val">11.0</span>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="paused"> Pause</label>
-  </div>
-  <div class="field">
-    <label>Frame Drops</label>
-    <span class="slider-label" id="frame_drops_val" style="text-align:left">0</span>
-  </div>
-</div>
-
-<!-- Visual -->
-<div class="panel" id="visual">
-  <div class="field">
-    <label>Theme</label>
-    <select id="theme">
-      <option value="matrix">matrix</option>
-      <option value="red-alert">red-alert</option>
-      <option value="ice">ice</option>
-      <option value="amber">amber</option>
-      <option value="neon">neon</option>
-      <option value="plasma">plasma</option>
-      <option value="ghost">ghost</option>
-      <option value="magma">magma</option>
-      <option value="storm">storm</option>
-      <option value="twilight">twilight</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Theme Mode</label>
-    <select id="theme_mode">
-      <option value="manual">manual</option>
-      <option value="bass">bass</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Scene Sync</label>
-    <select id="scene_sync">
-      <option value="adaptive">adaptive</option>
-      <option value="bpm">bpm</option>
-      <option value="hybrid">hybrid</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>UI Style</label>
-    <select id="ui_style">
-      <option value="full">full</option>
-      <option value="minimal">minimal</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Quality</label>
-    <select id="quality_mode">
-      <option value="auto">auto</option>
-      <option value="off">off</option>
-    </select>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="unicode_bars"> Unicode Bars</label>
-  </div>
-</div>
-
-<!-- Terminal -->
-<div class="panel" id="terminal">
-  <div class="field">
-    <label>Terminal Profile</label>
-    <select id="terminal_mode">
-      <option value="netrunner">netrunner</option>
-      <option value="hacker">hacker</option>
-      <option value="sysadmin">sysadmin</option>
-      <option value="retro">retro</option>
-      <option value="cyberpunk">cyberpunk</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Operation Mode</label>
-    <select id="operation_mode">
-      <option value="RECON">RECON</option>
-      <option value="EXPLOIT">EXPLOIT</option>
-      <option value="EXFIL">EXFIL</option>
-      <option value="DEFEND">DEFEND</option>
-      <option value="OBSERVE">OBSERVE</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Target Lock</label>
-    <select id="target_lock">
-      <option value="JUPITER-7">JUPITER-7</option>
-      <option value="DARKNODE-3">DARKNODE-3</option>
-      <option value="PHANTOM-19">PHANTOM-19</option>
-      <option value="ORACLE-42">ORACLE-42</option>
-      <option value="CIPHER-99">CIPHER-99</option>
-    </select>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="lock_scene"> Lock Scene</label>
-  </div>
-</div>
-
-<!-- Banner -->
-<div class="panel" id="banner">
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="show_banner"> Show Banner</label>
-  </div>
-  <div class="field">
-    <label>Banner Text</label>
-    <input type="text" id="banner_text" placeholder="Enter banner text...">
-  </div>
-  <div class="field">
-    <label>Banner Align</label>
-    <select id="banner_align">
-      <option value="left">left</option>
-      <option value="center">center</option>
-      <option value="right">right</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Banner Animation</label>
-    <select id="banner_anim">
-      <option value="off">off</option>
-      <option value="scroll">scroll</option>
-      <option value="pulse">pulse</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Banner Size</label>
-    <select id="banner_size">
-      <option value="normal">normal</option>
-      <option value="large">large</option>
-    </select>
-  </div>
-</div>
-
-<!-- Music -->
-<div class="panel" id="music">
-  <div class="field">
-    <label>Current Music</label>
-    <span class="slider-label" id="music_current_val" style="text-align:left">(none)</span>
-  </div>
-  <div class="field">
-    <label>New Music File</label>
-    <input type="text" id="music_choice" placeholder="Enter file path...">
-  </div>
-  <div class="checkbox-row" style="margin-top: 8px">
-    <button class="btn btn-browse" onclick="browseMusicFile()">Browse...</button>
-    <button class="btn btn-start" onclick="loadMusicFile()">Load Music</button>
-  </div>
-  <div class="field" style="margin-top: 12px;">
-    <label>YouTube URL</label>
-    <input type="text" id="youtube_url" placeholder="https://youtube.com/watch?v=...">
-  </div>
-  <div class="checkbox-row" style="margin-top: 8px">
-    <button class="btn btn-start" onclick="loadYouTube()">Load YouTube</button>
-  </div>
-  <div class="field" style="margin-top: 12px;">
-    <label>Music Status</label>
-    <span class="slider-label" id="music_status_val" style="text-align:left">-</span>
-  </div>
-</div>
-
-<!-- Features -->
-<div class="panel" id="features">
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="alert_tones"> Alert Tones</label>
-    <label><input type="checkbox" id="mission_timeline"> Mission Timeline</label>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="defender_ai"> Defender AI</label>
-    <label><input type="checkbox" id="audio_fx"> Audio FX</label>
-  </div>
-</div>
-
-<!-- Streaming -->
-<div class="panel" id="streaming">
-  <div class="field">
-    <label>Streaming Mode</label>
-    <select id="stream_mode">
-      <option value="file">file</option>
-      <option value="mic">mic</option>
-      <option value="system">system</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Sample Rate</label>
-    <select id="sample_rate">
-      <option value="22050">22050</option>
-      <option value="44100">44100</option>
-      <option value="48000">48000</option>
-    </select>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="normalize"> Enable Volume Normalization</label>
-    <label><input type="checkbox" id="web_enable"> Enable Web Server</label>
-  </div>
-  <div class="field">
-    <label>Web Port</label>
-    <select id="web_port">
-      <option value="8080">8080</option>
-      <option value="8081">8081</option>
-      <option value="8082">8082</option>
-    </select>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="remote_enable"> Enable Remote Socket</label>
-  </div>
-  <div class="field">
-    <label>Remote Port</label>
-    <select id="remote_port">
-      <option value="9998">9998</option>
-      <option value="9999">9999</option>
-      <option value="10000">10000</option>
-    </select>
-  </div>
-</div>
-
-<!-- Plugins -->
-<div class="panel" id="plugins">
-  <div class="field">
-    <label>Load Plugin</label>
-    <input type="text" id="plugin_path" placeholder="Path to plugin .py file...">
-  </div>
-  <div class="checkbox-row" style="margin-top: 4px">
-    <button class="btn btn-browse" onclick="browsePlugin()">Browse...</button>
-  </div>
-  <div class="field" style="margin-top: 12px;">
-    <label>Active Plugins</label>
-    <span class="slider-label" id="plugin_list_val" style="text-align:left">(none)</span>
-  </div>
-  <div class="section-divider"></div>
-  <div class="field">
-    <label>Save Preset</label>
-    <input type="text" id="preset_save_name" placeholder="Preset name...">
-  </div>
-  <div class="checkbox-row" style="margin-top: 4px">
-    <button class="btn btn-start" onclick="savePreset()">Save</button>
-  </div>
-  <div class="field" style="margin-top: 12px;">
-    <label>Load Preset</label>
-    <input type="text" id="preset_load_name" placeholder="Preset name...">
-  </div>
-  <div class="checkbox-row" style="margin-top: 4px">
-    <button class="btn btn-start" onclick="loadPreset()">Load</button>
-  </div>
-</div>
-
-<!-- Scene -->
-<div class="panel" id="scene">
-  <div class="field">
-    <label>Scene Pack</label>
-    <select id="scene_pack">
-      <option value="default">default</option>
-      <option value="hacknet">hacknet</option>
-      <option value="cyberpunk">cyberpunk</option>
-      <option value="neon">neon</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Storyboard Mode</label>
-    <select id="storyboard">
-      <option value="off">off</option>
-      <option value="auto">auto</option>
-      <option value="manual">manual</option>
-    </select>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="layered_panels"> Enable Layered Panels</label>
-    <label><input type="checkbox" id="adaptive_fps" checked> Enable Adaptive FPS</label>
-  </div>
-</div>
-
-<!-- Access -->
-<div class="panel" id="access">
-  <div class="field">
-    <label>Accessibility Mode</label>
-    <select id="acc_mode">
-      <option value="off">off</option>
-      <option value="high-contrast">high-contrast</option>
-      <option value="screen-reader">screen-reader</option>
-      <option value="high-contrast+reader">high-contrast+reader</option>
-    </select>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="screen_reader"> Enable Screen Reader Descriptions</label>
-  </div>
-  <div class="checkbox-row">
-    <label><input type="checkbox" id="collab"> Enable Collaborative Session</label>
-  </div>
-</div>
-
-<!-- Bottom bar -->
-<div class="btn-row">
-  <button class="btn btn-stop" onclick="stopConsole()">Stop Console</button>
-  <button class="btn btn-start" onclick="closeWindow()">Close Window</button>
-</div>
-
-<!-- Status bar -->
-<div class="status-bar" id="status-bar">
-  <span class="live">●</span> Live Controls — Open this file in a browser to manage CMD-AUDIO settings.
-</div>
+<div id="toasts" aria-live="polite"></div>
 
 <script>
-// Controls the backend can only honour at startup. They are marked so the page
-// does not pretend to change them mid-run.
-var STARTUP_ONLY = [
-  'music_choice', 'youtube_url', 'preset_save_name', 'preset_load_name',
-  'stream_mode', 'sample_rate', 'normalize', 'web_enable', 'web_port',
-  'remote_enable', 'remote_port', 'plugin_path', 'scene_pack', 'storyboard',
-  'layered_panels', 'adaptive_fps', 'acc_mode', 'screen_reader', 'collab'
-];
+// Controls that the /api/live endpoint does not own. They are excluded from
+// live patches on purpose: the music fields are handled by /api/music.
+var STARTUP_ONLY = ['music_choice','youtube_url'];
 
-STARTUP_ONLY.forEach(function(id) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  el.classList.add('startup-only');
-  var field = el.closest('.field') || el.closest('.checkbox-row');
-  var label = field ? field.querySelector('label') : null;
-  if (label && !label.querySelector('.startup-badge')) {
-    label.insertAdjacentHTML('beforeend',
-      ' <span class="startup-badge" title="Only applied when the run starts">next start</span>');
-  }
-});
+// Accent per theme, so the page matches the terminal palette.
+var ACCENTS = {
+  'matrix': '#26ffa5', 'red-alert': '#ff4f4f', 'ice': '#63d3ff', 'amber': '#ffb454',
+  'neon': '#ff5cd6', 'plasma': '#8f7bff', 'ghost': '#c9d6e2', 'magma': '#ff7a3d',
+  'storm': '#6ea8ff', 'twilight': '#a97bff'
+};
 
-// Tab switching
-document.querySelectorAll('.tab').forEach(function(tab) {
-  tab.addEventListener('click', function() {
-    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-    document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.panel).classList.add('active');
+var els = {};
+function el(id) {
+  if (!els[id]) els[id] = document.getElementById(id);
+  return els[id];
+}
+
+// --- toast ---------------------------------------------------------------
+function toast(msg, kind) {
+  var box = document.getElementById('toasts');
+  if (!box) return;
+  var node = document.createElement('div');
+  node.className = 'toast' + (kind ? ' ' + kind : '');
+  node.textContent = msg;
+  box.appendChild(node);
+  setTimeout(function() {
+    node.style.transition = 'opacity .25s, transform .25s';
+    node.style.opacity = '0';
+    node.style.transform = 'translateY(6px)';
+    setTimeout(function() { node.remove(); }, 260);
+  }, 2600);
+}
+
+// --- theme accents -------------------------------------------------------
+function applyAccent(theme) {
+  var color = ACCENTS[theme] || ACCENTS.matrix;
+  document.documentElement.style.setProperty('--accent', color);
+  document.body.dataset.theme = theme;
+  document.querySelectorAll('.swatch').forEach(function(s) {
+    s.classList.toggle('on', s.dataset.theme === theme);
+  });
+}
+
+document.querySelectorAll('.swatch').forEach(function(sw) {
+  sw.addEventListener('click', function() {
+    var sel = el('theme');
+    if (!sel) return;
+    sel.value = sw.dataset.theme;
+    applyAccent(sel.value);
+    pushLive(sel, sel.value);
   });
 });
 
-// Slider value display
+// --- sliders -------------------------------------------------------------
+function paintRange(slider) {
+  var min = parseFloat(slider.min || 0);
+  var max = parseFloat(slider.max || 100);
+  var v = parseFloat(slider.value);
+  var pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
+  slider.style.setProperty('--p', pct.toFixed(2) + '%');
+}
+
+function decimalsFor(step) {
+  step = String(step || '0.01');
+  var dot = step.indexOf('.');
+  return dot === -1 ? 0 : Math.min(2, step.length - dot - 1);
+}
+
+function valueText(slider) {
+  return parseFloat(slider.value).toFixed(decimalsFor(slider.step));
+}
+
 document.querySelectorAll('input[type=range]').forEach(function(slider) {
-  var valEl = document.getElementById(slider.id + '_val');
-  if (valEl) {
-    slider.addEventListener('input', function() {
-      valEl.textContent = parseFloat(slider.value).toFixed(2);
-    });
-  }
-});
-
-// Mock functions showing this is a standalone file
-function browseMusicFile() {
-  alert('Music file browser: Use a web server with backend for file selection.');
-}
-
-function browsePlugin() {
-  alert('Plugin browser: Use a web server with backend for file selection.');
-}
-
-function loadMusicFile() {
-  var path = document.getElementById('music_choice').value.trim();
-  if (!path) {
-    document.getElementById('music_status_val').textContent = 'Enter a file path first';
-    return;
-  }
-  document.getElementById('music_status_val').textContent = 'Loading...';
-  fetch('/api/music', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({url: path})
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    document.getElementById('music_status_val').textContent = d.status === 'ok' ? 'Load requested' : ('Error: ' + (d.message || 'unknown'));
-  }).catch(function(e) {
-    document.getElementById('music_status_val').textContent = 'Error: ' + e.message;
-  });
-}
-
-function loadYouTube() {
-  var url = document.getElementById('youtube_url').value.trim();
-  if (!url) {
-    document.getElementById('music_status_val').textContent = 'Enter a YouTube URL first';
-    return;
-  }
-  if (url.indexOf('youtube.com') === -1 && url.indexOf('youtu.be') === -1) {
-    document.getElementById('music_status_val').textContent = 'Invalid YouTube URL';
-    return;
-  }
-  document.getElementById('music_status_val').textContent = 'Downloading YouTube audio...';
-  fetch('/api/music', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({url: url})
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    document.getElementById('music_status_val').textContent = d.status === 'ok' ? 'YouTube download requested' : ('Error: ' + (d.message || 'unknown'));
-  }).catch(function(e) {
-    document.getElementById('music_status_val').textContent = 'Error: ' + e.message;
-  });
-}
-
-function savePreset() {
-  var name = document.getElementById('preset_save_name').value.trim();
-  if (!name) return;
-  alert('Preset "' + name + '" saved (requires web server backend).');
-}
-
-function loadPreset() {
-  var name = document.getElementById('preset_load_name').value.trim();
-  if (!name) return;
-  alert('Preset "' + name + '" loaded (requires web server backend).');
-}
-
-function stopConsole() {
-  if (confirm('Are you sure you want to stop the console?')) {
-    alert('Stop signal sent (requires web server backend).');
-  }
-}
-
-function closeWindow() {
-  window.close();
-}
-
-// Load saved state from localStorage
-(function loadState() {
-  try {
-    var saved = localStorage.getItem('cmd-audio-live-controls');
-    if (saved) {
-      var state = JSON.parse(saved);
-      Object.keys(state).forEach(function(key) {
-        var el = document.getElementById(key);
-        if (!el) return;
-        if (el.type === 'checkbox') {
-          el.checked = !!state[key];
-        } else {
-          el.value = state[key];
-        }
-        var valEl = document.getElementById(key + '_val');
-        if (valEl && el.type === 'range') {
-          valEl.textContent = parseFloat(el.value).toFixed(2);
-        }
-      });
-    }
-  } catch(e) {}
-})();
-
-// Save state on changes
-document.querySelectorAll('input, select').forEach(function(el) {
-  el.addEventListener('change', function() {
-    try {
-      var state = {};
-      document.querySelectorAll('input, select').forEach(function(inp) {
-        if (inp.type === 'checkbox') {
-          state[inp.id] = inp.checked;
-        } else {
-          state[inp.id] = inp.value;
-        }
-      });
-      localStorage.setItem('cmd-audio-live-controls', JSON.stringify(state));
-    } catch(e) {}
+  paintRange(slider);
+  var valEl = el(slider.id + '_val');
+  if (valEl) valEl.textContent = valueText(slider);
+  slider.addEventListener('input', function() {
+    paintRange(slider);
+    if (valEl) valEl.textContent = valueText(slider);
   });
 });
 
-// Load current state from server
-// --- connection status -------------------------------------------------
-// Every backend call used to fail silently, so a dead/incorrect backend looked
-// exactly like a working one. Surface it instead.
+// --- tabs ----------------------------------------------------------------
+function selectTab(id) {
+  var tab = document.querySelector('.tab[data-panel="' + id + '"]');
+  if (!tab) return;
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  tab.classList.add('active');
+  var panel = document.getElementById(id);
+  if (panel) panel.classList.add('active');
+  var title = document.getElementById('view-title');
+  var sub = document.getElementById('view-sub');
+  if (title) title.textContent = tab.dataset.title || '';
+  if (sub) sub.textContent = tab.dataset.sub || '';
+  if (window.location.hash.slice(1) !== id) {
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  }
+}
+
+document.querySelectorAll('.tab').forEach(function(tab) {
+  tab.addEventListener('click', function() { selectTab(tab.dataset.panel); });
+});
+
+window.addEventListener('hashchange', function() { selectTab(window.location.hash.slice(1)); });
+
+document.addEventListener('keydown', function(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var tag = (e.target && e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  var order = ['playback', 'visual', 'terminal', 'banner', 'music', 'features'];
+  var idx = parseInt(e.key, 10);
+  if (idx >= 1 && idx <= order.length) selectTab(order[idx - 1]);
+});
+
+// --- connection ----------------------------------------------------------
 var connBanner = document.getElementById('conn-banner');
 var connTitle = document.getElementById('conn-banner-title');
 var connDetail = document.getElementById('conn-banner-detail');
+var connPill = document.getElementById('conn-pill');
+var connText = document.getElementById('conn-text');
+var syncNote = document.getElementById('sync-note');
+var connected = null;
+var lastSync = 0;
+
+function setConnection(ok) {
+  connected = ok;
+  if (connPill) {
+    connPill.classList.toggle('live', ok);
+    connPill.classList.toggle('down', ok === false);
+  }
+  if (connText) connText.textContent = ok ? 'live' : 'offline';
+}
 
 function showConnError(detail) {
   if (!connBanner) return;
   connTitle.textContent = 'Not connected to CMD-AUDIO — controls are inert';
   connDetail.textContent = detail + '  (page: ' + window.location.href + ')';
-  connBanner.style.display = 'block';
+  connBanner.classList.add('show');
+  setConnection(false);
 }
 
 function clearConnError() {
-  if (connBanner) connBanner.style.display = 'none';
+  if (connBanner) connBanner.classList.remove('show');
+  setConnection(true);
 }
 
 function describeFetchError(path, err) {
@@ -705,6 +1249,7 @@ function apiFetch(path, options) {
     return r.json();
   }).then(function(d) {
     clearConnError();
+    lastSync = Date.now();
     return d;
   }).catch(function(e) {
     showConnError(describeFetchError(path, e));
@@ -712,45 +1257,121 @@ function apiFetch(path, options) {
   });
 }
 
-async function loadServerState() {
-  try {
-    var s = await apiFetch('/api/live-state');
-    if (s && !s.error) {
-      // Apply server state to controls (overrides localStorage)
-      // [server state key, element id] -- the server reports `theme_name`
-      // while the form control is called `theme`.
-      var fieldMap = [
-        ['sensitivity','sensitivity'], ['speed_min','speed_min'], ['speed_max','speed_max'],
-        ['terminal_switch_min','terminal_switch_min'], ['terminal_switch_max','terminal_switch_max'],
-        ['theme_name','theme'], ['theme_mode','theme_mode'], ['scene_sync','scene_sync'],
-        ['ui_style','ui_style'], ['quality_mode','quality_mode'],
-        ['banner_text','banner_text'], ['banner_align','banner_align'],
-        ['banner_anim','banner_anim'], ['banner_size','banner_size'],
-        ['terminal_mode','terminal_mode'], ['operation_mode','operation_mode'],
-        ['target_lock','target_lock']
-      ];
-      fieldMap.forEach(function(pair) {
-        var key = pair[0], id = pair[1];
-        var el = document.getElementById(id);
-        // never clobber a control the user is currently using
-        if (el && el === document.activeElement) return;
-        if (el && s[key] !== undefined && s[key] !== null) el.value = s[key];
-        var valEl = document.getElementById(id + '_val');
-        if (valEl && el && el.type === 'range') valEl.textContent = parseFloat(el.value).toFixed(2);
-      });
-      var bools = ['show_banner','unicode_bars','lock_scene','alert_tones','mission_timeline','defender_ai','audio_fx','paused'];
-      bools.forEach(function(f) {
-        var el = document.getElementById(f);
-        if (el && s[f] !== undefined) el.checked = !!s[f];
-      });
-      if (s.music_file) {
-        var mc = document.getElementById('music_current_val');
-        if (mc) mc.textContent = s.music_file;
-      }
+// --- state sync ----------------------------------------------------------
+function applySnap(s) {
+  // [server state key, element id] -- the server reports `theme_name`
+  // while the form control is called `theme`.
+  var fieldMap = [
+    ['sensitivity','sensitivity'], ['speed_min','speed_min'], ['speed_max','speed_max'],
+    ['terminal_switch_min','terminal_switch_min'], ['terminal_switch_max','terminal_switch_max'],
+    ['theme_name','theme'], ['theme_mode','theme_mode'], ['scene_sync','scene_sync'],
+    ['ui_style','ui_style'], ['quality_mode','quality_mode'],
+    ['banner_text','banner_text'], ['banner_align','banner_align'],
+    ['banner_anim','banner_anim'], ['banner_size','banner_size'],
+    ['terminal_mode','terminal_mode'], ['operation_mode','operation_mode'],
+    ['target_lock','target_lock']
+  ];
+  fieldMap.forEach(function(pair) {
+    var key = pair[0], id = pair[1];
+    var node = el(id);
+    // never clobber a control the user is currently using
+    if (!node || node === document.activeElement) return;
+    if (s[key] !== undefined && s[key] !== null) node.value = s[key];
+    if (node.type === 'range') {
+      paintRange(node);
+      var valEl = el(id + '_val');
+      if (valEl) valEl.textContent = valueText(node);
     }
-  } catch(e) {
-    // error already shown by apiFetch
+  });
+
+  var bools = ['show_banner','unicode_bars','lock_scene','alert_tones','mission_timeline','defender_ai','audio_fx','paused'];
+  bools.forEach(function(id) {
+    var node = el(id);
+    if (node && s[id] !== undefined) node.checked = !!s[id];
+  });
+
+  applyAccent(s.theme_name);
+
+  var pTitle = document.getElementById('np-title');
+  var pSub = document.getElementById('np-sub');
+  var pTheme = document.getElementById('np-theme');
+  var pSens = document.getElementById('np-sens');
+  var pDrops = el('frame_drops_val');
+  if (pTitle) pTitle.textContent = s.music_file || 'no track loaded';
+  if (pSub) pSub.textContent = s.music_status || (s.paused ? 'paused' : 'rendering');
+  if (pTheme) pTheme.textContent = s.theme_name || '—';
+  if (pSens) pSens.textContent = Number(s.sensitivity || 0).toFixed(2);
+  if (pDrops) {
+    var drops = Number(s.frame_drops || 0);
+    pDrops.textContent = drops;
+    pDrops.classList.toggle('warn', drops > 0);
   }
+
+  var song = el('music_current_val');
+  if (song) song.textContent = s.music_file || '(none)';
+  var mstat = el('music_status_val');
+  if (mstat && s.music_status) mstat.textContent = s.music_status;
+
+  var sessScene = document.getElementById('sess-scene');
+  if (sessScene) {
+    sessScene.textContent = s.lock_scene ? 'locked' : 'scrolling';
+    sessScene.classList.toggle('on', !!s.lock_scene);
+  }
+  var sessMode = document.getElementById('sess-mode');
+  if (sessMode) sessMode.textContent = s.theme_mode || '—';
+  var sessBars = document.getElementById('sess-bars');
+  if (sessBars) {
+    sessBars.textContent = s.unicode_bars ? 'unicode' : 'ascii';
+    sessBars.classList.toggle('on', !!s.unicode_bars);
+  }
+
+  paintPause(!!s.paused);
+  paintBanner(s.banner_text, s.banner_align, s.banner_anim, s.show_banner);
+}
+
+function paintPause(paused) {
+  var label = el('pause-label');
+  var btn = el('pause-btn');
+  if (label) label.textContent = paused ? 'Resume' : 'Pause';
+  if (btn) btn.classList.toggle('on', !!paused);
+}
+
+// the banner card mirrors what the render will draw
+function paintBanner(text, align, anim, visible) {
+  var box = document.getElementById('banner-preview');
+  var label = document.getElementById('bp-text');
+  if (!box || !label) return;
+  var clean = (text || '').trim();
+  var next = 'bp al-' + (align || 'center')
+    + (anim && anim !== 'off' ? ' an-' + anim : '')
+    + (visible && clean ? '' : ' hidden');
+  // only touch the DOM on change: reassigning the class restarts the animation
+  if (box.className !== next) box.className = next;
+  var shown = clean || 'no banner text';
+  if (label.textContent !== shown) label.textContent = shown;
+}
+
+function paintBannerFromForm() {
+  var t = el('banner_text');
+  var a = el('banner_align');
+  var n = el('banner_anim');
+  var v = el('show_banner');
+  paintBanner(t && t.value, a && a.value, n && n.value, v && v.checked);
+}
+
+function loadServerState() {
+  return apiFetch('/api/live-state').then(function(s) {
+    if (!s || s.error) {
+      setConnection(false);
+      if (connText) connText.textContent = 'no session';
+      if (syncNote) syncNote.textContent = 'no live session on this port';
+      return;
+    }
+    applySnap(s);
+    if (syncNote) syncNote.textContent = 'synced ' + new Date().toLocaleTimeString();
+  }).catch(function() {
+    if (syncNote) syncNote.textContent = 'backend unreachable';
+  });
 }
 
 // Initial load, then keep in sync with the terminal (keyboard changes there
@@ -758,8 +1379,11 @@ async function loadServerState() {
 loadServerState();
 setInterval(loadServerState, 2000);
 
-// Live settings sync - send changes to server
-function sendLiveSettings(patch) {
+// --- sending live settings ----------------------------------------------
+function pushLive(node, value) {
+  if (node && STARTUP_ONLY.indexOf(node.id) !== -1) return;  // not a live setting
+  var patch = {};
+  patch[node.id] = value;
   apiFetch('/api/live', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -767,39 +1391,126 @@ function sendLiveSettings(patch) {
   }).then(function(d) {
     // The backend reports what it took; anything else it did not understand.
     if (d && d.ignored && d.ignored.length) {
-      console.warn('Live settings ignored by the backend:', d.ignored);
+      toast('Not applied by the backend: ' + d.ignored.join(', '), 'warn');
     }
   }).catch(function(e) {
-    console.warn('Live settings sync failed:', e);
+    toast('Live sync failed: ' + e.message, 'bad');
   });
 }
 
-function sendIfLive(el, value) {
-  if (STARTUP_ONLY.indexOf(el.id) !== -1) return;  // cannot change mid-run
-  var patch = {};
-  patch[el.id] = value;
-  sendLiveSettings(patch);
+document.querySelectorAll('input[type=range]').forEach(function(node) {
+  node.addEventListener('input', function() { pushLive(node, parseFloat(node.value)); });
+});
+
+document.querySelectorAll('select').forEach(function(node) {
+  node.addEventListener('change', function() {
+    if (node.id === 'theme') applyAccent(node.value);
+    pushLive(node, node.value);
+  });
+});
+
+document.querySelectorAll('input[type=checkbox]').forEach(function(node) {
+  node.addEventListener('change', function() { pushLive(node, node.checked); });
+});
+
+document.querySelectorAll('input[type=text]').forEach(function(node) {
+  node.addEventListener('change', function() { pushLive(node, node.value); });
+});
+
+// the banner card previews the text as it is typed
+['banner_text', 'banner_align', 'banner_anim', 'show_banner'].forEach(function(id) {
+  var node = el(id);
+  if (!node) return;
+  node.addEventListener(node.type === 'text' ? 'input' : 'change', paintBannerFromForm);
+});
+
+// the header button reflects the switch the moment it is flipped
+var pauseBox = el('paused');
+if (pauseBox) pauseBox.addEventListener('change', function() { paintPause(pauseBox.checked); });
+
+// keep the page palette right on first paint, before the server answers
+applyAccent('matrix');
+if (window.location.hash.length > 1) selectTab(window.location.hash.slice(1));
+
+// --- actions -------------------------------------------------------------
+function togglePause() {
+  var box = el('paused');
+  if (!box) return;
+  box.checked = !box.checked;
+  paintPause(box.checked);
+  pushLive(box, box.checked);
 }
 
-// Sliders: send on input (continuous)
-document.querySelectorAll('input[type=range]').forEach(function(el) {
-  el.addEventListener('input', function() { sendIfLive(el, parseFloat(el.value)); });
-});
+function browseMusicFile() {
+  toast('Pick a file on the machine running CMD-AUDIO and paste its path.', 'warn');
+}
 
-// Selects: send on change
-document.querySelectorAll('select').forEach(function(el) {
-  el.addEventListener('change', function() { sendIfLive(el, el.value); });
-});
+function loadMusicFile() {
+  var input = el('music_choice');
+  var status = el('music_status_val');
+  var path = (input && input.value || '').trim();
+  if (!path) {
+    if (status) status.textContent = 'Enter a file path first';
+    toast('Enter a file path first', 'warn');
+    return;
+  }
+  if (status) status.textContent = 'requesting ' + path + ' …';
+  apiFetch('/api/music', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: path})
+  }).then(function(d) {
+    var ok = d.status === 'ok';
+    if (status) status.textContent = ok ? 'load requested' : ('error: ' + (d.message || 'unknown'));
+    toast(ok ? 'Track change requested' : ('Error: ' + (d.message || 'unknown')), ok ? '' : 'bad');
+  }).catch(function(e) {
+    if (status) status.textContent = 'error: ' + e.message;
+  });
+}
 
-// Checkboxes: send on change
-document.querySelectorAll('input[type=checkbox]').forEach(function(el) {
-  el.addEventListener('change', function() { sendIfLive(el, el.checked); });
-});
+function loadYouTube() {
+  var input = el('youtube_url');
+  var status = el('music_status_val');
+  var url = (input && input.value || '').trim();
+  if (!url) {
+    if (status) status.textContent = 'Enter a YouTube URL first';
+    toast('Enter a YouTube URL first', 'warn');
+    return;
+  }
+  if (url.indexOf('youtube.com') === -1 && url.indexOf('youtu.be') === -1) {
+    if (status) status.textContent = 'Not a YouTube URL';
+    toast('Not a YouTube URL', 'warn');
+    return;
+  }
+  if (status) status.textContent = 'downloading YouTube audio…';
+  apiFetch('/api/music', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: url})
+  }).then(function(d) {
+    var ok = d.status === 'ok';
+    if (status) status.textContent = ok ? 'download requested' : ('error: ' + (d.message || 'unknown'));
+    toast(ok ? 'YouTube download requested' : ('Error: ' + (d.message || 'unknown')), ok ? '' : 'bad');
+  }).catch(function(e) {
+    if (status) status.textContent = 'error: ' + e.message;
+  });
+}
 
-// Text inputs: send on change (not input, to avoid flooding)
-document.querySelectorAll('input[type=text]').forEach(function(el) {
-  el.addEventListener('change', function() { sendIfLive(el, el.value); });
-});
+function stopConsole() {
+  if (!confirm('Stop the running CMD-AUDIO render?')) return;
+  apiFetch('/api/stop', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: '{}'
+  }).then(function() {
+    toast('Stop requested — the render is shutting down');
+    if (syncNote) syncNote.textContent = 'stop requested';
+    setConnection(false);
+    if (connText) connText.textContent = 'stopped';
+  }).catch(function(e) {
+    toast('Stop failed: ' + e.message, 'bad');
+  });
+}
 </script>
 </body>
 </html>

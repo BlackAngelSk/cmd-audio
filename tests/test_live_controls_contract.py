@@ -18,6 +18,7 @@ import urllib.request
 
 import pytest
 
+from cmd_audio.config import OPERATION_MODES, TARGETS, TERMINAL_PROFILES, THEMES, THEME_MODES
 from cmd_audio.web_server import AudioServer, load_live_controls_html
 
 from .test_web_server import _state
@@ -105,7 +106,9 @@ def test_backend_keys_are_all_read_by_the_page(server) -> None:
 
     # applied outside fieldMap/bools, or pure status readouts
     handled_elsewhere = {"music_file", "music_status", "frame_drops", "quit_requested"}
-    assert "if (s.music_file)" in html, "the page must show the current song"
+    # the status readouts are rendered by hand, not through the form map
+    for key in ("music_file", "music_status", "frame_drops"):
+        assert "s." + key in html, f"the page never shows {key} from the snapshot"
 
     snap = server._state().snapshot()
     for key in vars(snap):
@@ -120,3 +123,38 @@ def test_startup_only_controls_are_not_pretended_to_be_live(server) -> None:
         assert cid in payload["ignored"], (
             f"'{cid}' is marked startup-only in the page but the backend accepted it"
         )
+
+
+def _page_options(control_id: str) -> set:
+    html = load_live_controls_html()
+    m = re.search(
+        r'<select\b[^>]*\bid="%s"[^>]*>(.*?)</select>' % re.escape(control_id), html, re.S
+    )
+    assert m, f"no <select id='{control_id}'> on the page"
+    return set(re.findall(r'<option\b[^>]*\bvalue="([^"]*)"', m.group(1)))
+
+
+@pytest.mark.parametrize(
+    "control_id, allowed",
+    [
+        ("theme", lambda: set(THEMES)),
+        ("theme_mode", lambda: set(THEME_MODES)),
+        ("scene_sync", lambda: {"adaptive", "bpm", "hybrid"}),
+        ("ui_style", lambda: {"full", "minimal"}),
+        ("quality_mode", lambda: {"auto", "off"}),
+        ("terminal_mode", lambda: set(TERMINAL_PROFILES)),
+        ("operation_mode", lambda: set(OPERATION_MODES)),
+        ("target_lock", lambda: set(TARGETS)),
+        ("banner_align", lambda: {"left", "center", "right"}),
+        ("banner_anim", lambda: {"off", "scroll", "pulse"}),
+        ("banner_size", lambda: {"normal", "large"}),
+    ],
+)
+def test_page_dropdowns_offer_exactly_what_the_backend_accepts(control_id, allowed) -> None:
+    """A dropdown whose options the setters reject looks fine and does nothing.
+
+    The page used to offer ``hacker`` / ``sysadmin`` / ``JUPITER-7`` for
+    terminal profile, operation mode and target lock; every one of those was
+    silently dropped by the matching setter.
+    """
+    assert _page_options(control_id) == allowed()

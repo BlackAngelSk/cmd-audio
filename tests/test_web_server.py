@@ -109,6 +109,30 @@ def test_post_music_requests_a_track_change(server) -> None:
     assert server._state().consume_music_change() == "/tmp/song.mp3"
 
 
+def test_post_stop_requests_a_quit(server) -> None:
+    assert server._state().snapshot().quit_requested is False
+    status, payload = _post(f"http://127.0.0.1:{server.port}/api/stop", {})
+    assert status == 200 and payload["status"] == "ok"
+    # the render loop polls this and breaks out
+    assert server._state().snapshot().quit_requested is True
+
+
+def test_post_stop_without_live_state_reports_error() -> None:
+    srv = AudioServer("127.0.0.1", 0, live_on_root=True)
+    srv.live_state = None
+    import cmd_audio.web_server as ws
+
+    original = ws._current_live_state
+    ws._current_live_state = lambda: None
+    try:
+        assert srv.start(), srv.bind_error
+        status, payload = _post(f"http://127.0.0.1:{srv.port}/api/stop", {})
+        assert status == 200 and payload["status"] == "error"
+    finally:
+        ws._current_live_state = original
+        srv.stop()
+
+
 def test_unknown_api_path_is_404_not_html(server) -> None:
     with pytest.raises(urllib.error.HTTPError) as exc:
         _get(f"http://127.0.0.1:{server.port}/api/does-not-exist")

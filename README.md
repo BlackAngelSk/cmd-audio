@@ -89,11 +89,15 @@ The app prints the URL it is serving and the panel is at `/` (so
 `http://localhost:8080/`). The panel drives the running render: sliders, theme,
 banner, UI style and the feature toggles apply on the next frame, and the page
 polls `/api/live-state` every 2s so keyboard changes made in the terminal show
-up in the browser too.
+up in the browser too. The accent colour of the page follows the active theme,
+and the panel previews the render output (levels, banner) as you change it.
 
-Controls that can only take effect when a run starts (`sample_rate`,
-`web_enable`, `normalize`, `adaptive_fps`, ...) are labelled **next start** in
-the panel; the backend reports them under `ignored` instead of pretending.
+The panel only exposes controls the backend can apply live. Anything that is
+read once at startup (capture source, sample rate, web port, plugins, scene
+packs, presets) stays on the command line — see `./start.sh --help`.
+
+`Stop console` posts to `/api/stop`, which asks the render loop to quit — the
+same thing `q` does in the terminal.
 
 `--setup-ui` serves the setup form at `/` and the panel at `/live-controls`.
 `--setup-ui --web` together reuse the same port instead of failing to bind.

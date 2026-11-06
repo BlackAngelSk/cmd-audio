@@ -262,6 +262,16 @@ class AudioServer:
                         self._send_json({"status": "ok", "applied": applied, "ignored": rejected})
                     except Exception as e:
                         self._send_json({"status": "error", "message": str(e)})
+                elif self.path == "/api/stop":
+                    length = int(self.headers.get("Content-Length", 0))
+                    self.rfile.read(length)
+                    ls = server._state()
+                    if ls is None:
+                        self._send_json({"status": "error", "message": "Live state not available"})
+                    else:
+                        # The render loop breaks out on the next frame.
+                        ls.request_quit()
+                        self._send_json({"status": "ok", "message": "Stop requested"})
                 elif self.path == "/api/cancel":
                     server.config_received = None
                     server.config_event.set()
