@@ -15,13 +15,55 @@ def test_all_frames_share_one_geometry() -> None:
         assert len(widths) == 1, widths
 
 
-def test_jaw_opens_on_a_fresh_line_and_closes_when_quiet() -> None:
+def _bottom(rows) -> int:
+    for i in range(len(rows) - 1, -1, -1):
+        if rows[i].strip():
+            return i
+    return -1
+
+
+def test_jaw_frames_actually_travel() -> None:
+    """The whole point: the mandible has to move down between frames."""
+    closed, half, opened = skull._FRAMES
+    assert closed != half and half != opened
+    assert _bottom(closed) < _bottom(half) < _bottom(opened)
+
+
+def test_jaw_open_on_a_fresh_line_and_shut_in_silence() -> None:
     assert skull.jaw_frame(0.02, beat=False, fresh=False) == 0
     assert skull.jaw_frame(0.20, beat=False, fresh=False) == 1
     assert skull.jaw_frame(0.80, beat=False, fresh=False) == 2
-    assert skull.jaw_frame(0.05, beat=True, fresh=False) == 0      # too quiet to move
-    assert skull.jaw_frame(0.40, beat=True, fresh=False) == 2
-    assert skull.jaw_frame(0.10, beat=False, fresh=True) == 2      # new line: mouth opens
+    assert skull.jaw_frame(0.10, beat=False, fresh=True) == 2
+
+
+def test_animator_keeps_moving_on_a_steady_loud_track() -> None:
+    """Regression: a level threshold pinned the jaw open for a whole song."""
+    anim = skull.JawAnimator(rate=7.0)
+    seen = set()
+    for _ in range(60):  # 2 s at 30 fps, level never drops
+        seen.add(skull.frame_from_amount(anim.update(1 / 30, 0.95)))
+    assert seen == {0, 1, 2}, f"jaw stuck on frames {seen}"
+
+
+def test_animator_stays_shut_in_silence() -> None:
+    anim = skull.JawAnimator()
+    amounts = [anim.update(1 / 30, 0.0) for _ in range(30)]
+    assert max(amounts) < 0.34
+    assert {skull.frame_from_amount(a) for a in amounts} == {0}
+
+
+def test_animator_opens_fully_when_a_line_starts() -> None:
+    anim = skull.JawAnimator()
+    assert anim.update(1 / 30, 0.0, fresh=True) >= 0.99
+
+
+def test_animator_clamps_a_long_stall() -> None:
+    """A paused window must not jump the mouth open on resume."""
+    anim = skull.JawAnimator()
+    anim.update(1 / 30, 0.0)
+    amount = anim.update(30.0, 0.0)
+    assert amount < 0.34            # still a closed frame
+    assert anim._env == 0.0         # no phantom beat envelope
 
 
 def test_no_block_without_a_line() -> None:

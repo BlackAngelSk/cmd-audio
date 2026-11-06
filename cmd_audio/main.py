@@ -1093,6 +1093,8 @@ def main() -> int:
     track_lyrics = pinned_lyrics
     lyric_index = -2
     lyric_changed_at = -10.0
+    jaw_anim = lyric_skull.JawAnimator()
+    jaw_last_t = time.perf_counter()
     try:
         while running:
             if live_state is not None:
@@ -1624,9 +1626,14 @@ def main() -> int:
                         lyric_index = line_idx
                         lyric_changed_at = audio_t
                     fresh = (audio_t - lyric_changed_at) < 0.32
+                    # A stateless level threshold pins this open; the animator
+                    # keeps the mouth moving between beats.
+                    now = time.perf_counter()
+                    jaw_amount = jaw_anim.update(now - jaw_last_t, level, pulse > 0, fresh)
+                    jaw_last_t = now
                     block = lyric_skull.render_block(
                         center_w - 2,
-                        lyric_skull.jaw_frame(level, pulse > 0, fresh),
+                        lyric_skull.frame_from_amount(jaw_amount),
                         lyric_line,
                         next_line,
                         bright=_cfg.GREEN_BRIGHT,
