@@ -66,6 +66,8 @@ from cmd_audio.mission import (
     should_shift_scene,
 )
 from cmd_audio.control import LiveControlState
+from cmd_audio import lyrics as lyric_source
+from cmd_audio import skull as lyric_skull
 from cmd_audio.logging_config import setup_logging, get_logger
 from cmd_audio.web_server import start_web_server, AudioServer
 from cmd_audio.remote_control import create_remote_control
@@ -321,6 +323,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-defender-ai", dest="defender_ai", action="store_false")
     p.add_argument("--audio-fx", dest="audio_fx", action="store_true")
     p.add_argument("--no-audio-fx", dest="audio_fx", action="store_false")
+    p.add_argument(
+        "--lyrics", dest="lyrics", action="store_true", default=True,
+        help="Load timed lyrics and draw the lyric skull in the array (default)",
+    )
+    p.add_argument(
+        "--no-lyrics", dest="lyrics", action="store_false",
+        help="Never load lyrics; the hacknet array stays untouched",
+    )
+    p.add_argument("--lyrics-file", default="", help="Use this .lrc file instead of auto-detection")
     p.add_argument("--diagnostics", action="store_true", help="Print startup diagnostics to stderr")
     p.add_argument("--setup-ui", dest="setup_ui", action="store_true")
     p.add_argument("--no-setup-ui", dest="setup_ui", action="store_false")
@@ -665,6 +676,24 @@ def main() -> int:
     if live_state is not None:
         live_state.set_music_file(track_name)
 
+    # Lyrics. Only *timed* lines can drive the skull, so the lookup runs on a
+    # thread: a network round-trip must never stall the first frame.
+    pinned_lyrics = lyric_source.Lyrics()
+    lyrics_loader: Optional[lyric_source.LyricsLoader] = None
+    pinned_file = getattr(args, "lyrics_file", "") or ""
+    if pinned_file:
+        loaded = lyric_source.from_file(pinned_file)
+        if loaded is None:
+            logger.warning("Lyrics file not usable: %s", pinned_file)
+        elif not loaded.timed:
+            logger.warning("Lyrics file has no timestamps, skull stays hidden: %s", pinned_file)
+        else:
+            pinned_lyrics = loaded
+            logger.info("Lyrics pinned to %s (%d lines)", pinned_file, len(loaded.lines))
+    elif getattr(args, "lyrics", False):
+        lyrics_loader = lyric_source.load_async(audio_path, track_name, audio.duration)
+        logger.info("Looking up timed lyrics for %s", track_name)
+
     # Apply volume normalization if requested
     if args.normalize and audio is not None:
         logger.info("Normalizing audio levels...")
@@ -966,6 +995,7 @@ def main() -> int:
         nonlocal start, visual_t, prev_level, pulse, history, logs
         nonlocal next_bpm_tick_at, bpm_interval, target_lock, operation_mode
         nonlocal net_state, shell_lines, audio_path, track_name
+        nonlocal lyrics_loader, track_lyrics, lyric_index, lyric_changed_at
 
         new_music = new_music_path.strip()
         if not new_music:
@@ -1028,6 +1058,14 @@ def main() -> int:
             live_state.set_music_file(track_name)
             live_state.set_music_status("Loaded successfully")
 
+        # A new track must not inherit the previous track's lines.
+        track_lyrics = pinned_lyrics
+        lyric_index = -2
+        lyric_changed_at = -10.0
+        lyrics_loader = None
+        if not pinned_file and getattr(args, "lyrics", False):
+            lyrics_loader = lyric_source.load_async(new_music, track_name, audio.duration)
+
     def advance_playlist(step: int) -> bool:
         nonlocal playlist_index, audio_path
         if not playlist_tracks:
@@ -1049,6 +1087,12 @@ def main() -> int:
     # Random attack pattern for YouTube
     current_attack_pattern = None
     attack_pattern_timer = 0.0
+
+    # Lyric skull state. The block only exists while a timed line is active,
+    # which is what leaves the array untouched on instrumentals.
+    track_lyrics = pinned_lyrics
+    lyric_index = -2
+    lyric_changed_at = -10.0
     try:
         while running:
             if live_state is not None:
@@ -1567,6 +1611,37 @@ def main() -> int:
                 active_modules=active_visual_modules,
             )
             center_lines = compose_center_panel(center_w - 2, body_h - 2, nodes, firewall, ports_arr, crypto, module_names=active_visual_modules)
+
+            # Lyric skull. Drawn over the array body only while a timed line is
+            # being sung -- no lyrics, no skull. The 3-panel layout is the only
+            # one with a center column wide and tall enough to hold it.
+            if lyrics_loader is not None and lyrics_loader.done:
+                track_lyrics = lyrics_loader.result()
+            if track_lyrics.timed and width >= 150:
+                line_idx, lyric_line, next_line = track_lyrics.at(audio_t)
+                if lyric_line.strip():
+                    if line_idx != lyric_index:
+                        lyric_index = line_idx
+                        lyric_changed_at = audio_t
+                    fresh = (audio_t - lyric_changed_at) < 0.32
+                    block = lyric_skull.render_block(
+                        center_w - 2,
+                        lyric_skull.jaw_frame(level, pulse > 0, fresh),
+                        lyric_line,
+                        next_line,
+                        bright=_cfg.GREEN_BRIGHT,
+                        dim=_cfg.GREEN_DIM,
+                        accent=_cfg.GREEN_BRIGHT,
+                        reset=_cfg.RESET,
+                        small=len(center_lines) < lyric_skull.block_height() + 4,
+                    )
+                    if block and len(block) <= len(center_lines):
+                        top = max(0, (len(center_lines) - len(block)) // 2)
+                        center_lines[top:top + len(block)] = block
+                else:
+                    # blank line in the LRC: keep tracking the position so the
+                    # next line still reads as "fresh" when it starts
+                    lyric_index = line_idx
 
             left_lines = logs[-(body_h - 2):]
             right_lines = build_telemetry_lines(

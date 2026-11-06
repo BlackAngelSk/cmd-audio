@@ -13,6 +13,7 @@ Run it with the bundled launcher (uses the project virtualenv):
 - Audio-synced animated terminal scenes
 - Multiple themes and presets
 - Scene packs and adaptive scene sync
+- ASCII skull in the hacknet array that lips-syncs to timed lyrics
 - Browser live-controls panel (see `live_controls.html`)
 - Frame recording and replay support
 - Optional plugin hook support
@@ -119,6 +120,8 @@ doing nothing.
 --speed-max FLOAT             Maximum visual speed
 --theme {matrix,red-alert,ice,amber}
 --preset NAME                 Apply visual preset
+--lyrics / --no-lyrics        Look up timed lyrics and draw the lyric skull (default on)
+--lyrics-file PATH            Use this .lrc instead of auto-detection
 --scene-sync {adaptive,bpm,hybrid}
 --quality-mode {off,auto}
 --ui-style {full,minimal}
@@ -137,6 +140,34 @@ Get complete CLI help:
 ```bash
 ./start.sh --help
 ```
+
+## Lyrics and the skull
+
+When CMD-AUDIO knows *timed* lyrics it draws an ASCII skull in the middle of the
+hacknet array: the jaw drops on each new line and follows the level while the
+line is being sung, with the current line bright underneath and the next one
+dim. A track with no timed lyrics is left exactly as it was — no skull, no
+placeholder.
+
+Timed lyrics come from, in order:
+
+1. a `.lrc` file next to the audio file (`song.mp3` -> `song.lrc`),
+2. a lyrics tag embedded in the container (`ffprobe` reads it),
+3. [lrclib.net](https://lrclib.net) — one lookup per track, cached under
+   `~/.cache/cmd-audio/lyrics/`.
+
+Plain (untimed) lyrics are detected but never drawn, because there is no way to
+know which line is being sung.
+
+```bash
+./start.sh song.mp3                  # auto: sidecar, tag, then lrclib
+./start.sh song.mp3 --no-lyrics      # never look up or draw lyrics
+./start.sh song.mp3 --lyrics-file x.lrc
+```
+
+The skull only appears in the three-column layout (terminal at least 150
+columns wide) where the array panel has room for it; narrower layouts keep the
+array.
 
 ## Live Controls
 
