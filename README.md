@@ -13,7 +13,7 @@ Run it with the bundled launcher (uses the project virtualenv):
 - Audio-synced animated terminal scenes
 - Multiple themes and presets
 - Scene packs and adaptive scene sync
-- ASCII skull in the hacknet array that lips-syncs to timed lyrics
+- Pixel skull in the hacknet array that lips-syncs to timed lyrics
 - Browser live-controls panel (see `live_controls.html`)
 - Frame recording and replay support
 - Optional plugin hook support
@@ -167,7 +167,8 @@ know which line is being sung.
 
 The skull only appears in the three-column layout (terminal at least 150
 columns wide) where the array panel has room for it; narrower layouts keep the
-array.
+array. It is drawn with block glyphs, so it needs a UTF-8 terminal — on any
+other encoding it is skipped rather than rendered as garbage.
 
 ## Live Controls
 

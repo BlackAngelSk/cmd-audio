@@ -88,10 +88,10 @@ def test_block_colours_the_current_line_bright_and_the_next_one_dim() -> None:
 
 
 def test_long_lines_are_clipped_to_the_panel() -> None:
-    block = skull.render_block(20, 0, "a" * 80, "")
+    block = skull.render_block(40, 0, "a" * 80, "")
     assert block is not None
     for row in block:
-        assert visible_len(row) == 20
+        assert visible_len(row) == 40
     # the lyric row is the one before the trailing spacer
     assert "~" in block[-2]
 
@@ -103,16 +103,16 @@ def test_skull_drops_out_when_the_panel_is_narrower_than_the_art() -> None:
 
 
 def test_narrow_panels_fall_back_to_the_small_skull() -> None:
-    block = skull.render_block(20, 0, "hi", "next line")
+    block = skull.render_block(40, 0, "hi", "next line")
     assert block is not None
     for row in block:
-        assert visible_len(row) == 20
+        assert visible_len(row) == 40
     assert len(block) == skull.block_height(small=True)
 
 
 def test_short_panels_use_the_small_skull() -> None:
-    big = skull.render_block(30, 0, "line", "", small=False)
-    small = skull.render_block(30, 0, "line", "", small=True)
+    big = skull.render_block(60, 0, "line", "", small=False)
+    small = skull.render_block(60, 0, "line", "", small=True)
     assert big is not None and small is not None
     assert len(small) < len(big)
     assert skull.block_height(small=True) < skull.block_height(small=False)
@@ -121,6 +121,6 @@ def test_short_panels_use_the_small_skull() -> None:
 def test_block_fits_inside_a_small_panel() -> None:
     """The caller reserves block_height() rows; the block must not exceed it."""
     for small in (False, True):
-        block = skull.render_block(30, 2, "x", "y", small=small)
+        block = skull.render_block(60, 2, "x", "y", small=small)
         assert block is not None
         assert len(block) <= skull.block_height(small=small)

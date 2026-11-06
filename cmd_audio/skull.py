@@ -1,9 +1,12 @@
 """ASCII skull that lips-syncs with the current lyric line.
 
-The head stays put and the jaw is a separate piece that drops 0-2 rows, so the
-mouth travels instead of the whole skull shifting. Every frame is the same size.
+A solid pixel skull: the cranium is filled, so an open mouth reads as a dark
+gap. The head is fixed and the mandible is a separate piece that drops 0-2
+rows. Blocks need a UTF-8 terminal -- :func:`supports_unicode` is checked by
+the renderer, which simply skips the skull when the output encoding cannot
+carry it.
 
-Motion comes from :class:`JawAnimator`: a beat/flux envelope plus a continuous
+Motion comes from :class:`JawAnimator`: a beat envelope plus a continuous
 about-7 Hz "speaking" oscillation. A level threshold alone pins the jaw open on
 loud tracks, which is exactly how the skull ends up looking frozen.
 """
@@ -11,60 +14,75 @@ loud tracks, which is exactly how the skull ends up looking frozen.
 from __future__ import annotations
 
 import math
+import sys
 from typing import List, Optional, Sequence
 
 from cmd_audio.utils import clamp
 
-# Rows 0-8 are the head and are shared by every frame; the jaw comes after.
-_HEAD: Sequence[str] = (
-    r"         .-------.      ",
-    r"       .'         '.    ",
-    r"      /             \   ",
-    r"     |  ( o )  ( o ) |  ",
-    r"     |   \_/    \_/  |  ",
-    r"     |       /\      |  ",
-    r"      \    /    \   /   ",
-    r"       '. /      \.'    ",
-    r"         \|IIIIIIII|/   ",
+# Head rows are fixed; the rows below are the mandible.
+_BIG_HEAD: Sequence[str] = (
+    "      ██████████████████████████████",
+    "     ████████████████████████████████",
+    "   ████████████████████████████████████",
+    "  ██████████████████████████████████████",
+    "  ██████████████████████████████████████",
+    " ████████        ████████        ████████",
+    " ███████          ██████          ███████",
+    " ███████          ██████          ███████",
+    " ███████          ██████          ███████",
+    " ████████        ████████        ████████",
+    "  ██████████████████████████████████████",
+    "   ████████████████████████████████████",
+    "    ████████████████  ████████████████",
+    "      █ █ █ █ █ █ █   █ █ █ █ █ █ █ █",
 )
 
-_CLOSED: Sequence[str] = _HEAD + (
-    r"          |IIIIIIII|    ",
-    r"           \______/     ",
-    r"                        ",
-    r"                        ",
+_BIG_JAW: Sequence[str] = (
+    "        █ █ █ █ █ █     █ █ █ █ █ █",
+    "         ████████████████████████",
+    "          ██████████████████████",
+    "           ████████████████████",
+    "            ██████████████████",
+    "             ████████████████",
+    "",
+    "",
 )
 
-_HALF: Sequence[str] = _HEAD + (
-    r"          |        |    ",
-    r"          |IIIIIIII|    ",
-    r"           \______/     ",
-    r"                        ",
+_SMALL_HEAD: Sequence[str] = (
+    "   ██████████████████",
+    "  ████████████████████",
+    " ██████████████████████",
+    " ████     ████     ████",
+    "█████      ██      █████",
+    " ████     ████     ████",
+    " ██████████████████████",
+    "  █ █ █ █ █   █ █ █ █",
 )
 
-_OPEN: Sequence[str] = _HEAD + (
-    r"          |        |    ",
-    r"          |        |    ",
-    r"          |IIIIIIII|    ",
-    r"           \______/     ",
+_SMALL_JAW: Sequence[str] = (
+    "    █ █ █ █   █ █ █",
+    "      ████████████",
+    "       ██████████",
+    "        ████████",
+    "",
 )
 
-# A compact skull for panels too short for the big one.
-_SMALL_CLOSED: Sequence[str] = (
-    r"   .------.   ",
-    r"  / o    o \  ",
-    r" |    __    | ",
-    r"  \  |__|  /  ",
-    r"   `------`   ",
-)
+BLOCK = "\u2588"
 
-_SMALL_OPEN: Sequence[str] = (
-    r"   .------.   ",
-    r"  / o    o \  ",
-    r" |    __    | ",
-    r"  \  |  |  /  ",
-    r"   `--..--`   ",
-)
+
+def supports_unicode(stream=None) -> bool:
+    """True when the output can carry block glyphs without mojibake."""
+    stream = stream if stream is not None else sys.stdout
+    encoding = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+    return "utf8" in encoding or "utf_8" in encoding
+
+
+def _jaw_frames(head: Sequence[str], jaw: Sequence[str]) -> List[List[str]]:
+    """Closed / half open / open, with the mandible dropping as one piece."""
+    blank = " " * max(len(r) for r in list(head) + list(jaw))
+    head = list(head)
+    jaw = list(jaw)
+    return [head + jaw, head + [blank] + jaw, head + [blank, blank] + jaw]
 
 
 def _normalise(frames: Sequence[Sequence[str]]) -> List[List[str]]:
@@ -79,8 +97,8 @@ def _normalise(frames: Sequence[Sequence[str]]) -> List[List[str]]:
     return out
 
 
-_FRAMES = _normalise((_CLOSED, _HALF, _OPEN))
-_SMALL_FRAMES = _normalise((_SMALL_CLOSED, _SMALL_CLOSED, _SMALL_OPEN))
+_FRAMES = _normalise(_jaw_frames(_BIG_HEAD, _BIG_JAW))
+_SMALL_FRAMES = _normalise(_jaw_frames(_SMALL_HEAD, _SMALL_JAW))
 
 SKULL_WIDTH = len(_FRAMES[0][0])
 SKULL_HEIGHT = len(_FRAMES[0])
@@ -175,19 +193,19 @@ def render_block(
     body: List[str] = []
     for row in art:
         centred = row.ljust(art_w).center(width)
-        body.append(f"{accent}{centred}{reset}" if accent else centred)
+        body.append(accent + centred + reset if accent else centred)
 
     body.append(" " * width)
 
     label = text if len(text) <= width - 2 else text[: max(0, width - 2)] + "~"
     label = label.center(width)
-    body.append(f"{bright}{label}{reset}" if bright else label)
+    body.append(bright + label + reset if bright else label)
 
     nxt = (next_line or "").strip()
     if nxt:
         label = nxt if len(nxt) <= width - 2 else nxt[: max(0, width - 2)] + "~"
         label = label.center(width)
-        body.append(f"{dim}{label}{reset}" if dim else label)
+        body.append(dim + label + reset if dim else label)
 
     # keep one clear row between the block and whatever the array draws next
     body.append(" " * width)

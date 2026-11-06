@@ -1095,6 +1095,9 @@ def main() -> int:
     lyric_changed_at = -10.0
     jaw_anim = lyric_skull.JawAnimator()
     jaw_last_t = time.perf_counter()
+    # The skull is drawn with block glyphs; skip it entirely on a non-UTF-8
+    # terminal rather than rendering garbage.
+    unicode_ok = lyric_skull.supports_unicode()
     try:
         while running:
             if live_state is not None:
@@ -1619,7 +1622,7 @@ def main() -> int:
             # one with a center column wide and tall enough to hold it.
             if lyrics_loader is not None and lyrics_loader.done:
                 track_lyrics = lyrics_loader.result()
-            if track_lyrics.timed and width >= 150:
+            if track_lyrics and track_lyrics.timed and unicode_ok and width >= 150:
                 line_idx, lyric_line, next_line = track_lyrics.at(audio_t)
                 if lyric_line.strip():
                     if line_idx != lyric_index:
