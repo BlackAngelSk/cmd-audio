@@ -103,10 +103,10 @@ def test_skull_drops_out_when_the_panel_is_narrower_than_the_art() -> None:
 
 
 def test_narrow_panels_fall_back_to_the_small_skull() -> None:
-    block = skull.render_block(40, 0, "hi", "next line")
+    block = skull.render_block(30, 0, "hi", "next line")
     assert block is not None
     for row in block:
-        assert visible_len(row) == 40
+        assert visible_len(row) == 30
     assert len(block) == skull.block_height(small=True)
 
 

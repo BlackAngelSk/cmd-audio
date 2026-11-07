@@ -1,10 +1,12 @@
-"""ASCII skull that lips-syncs with the current lyric line.
+"""Pixel skull that lips-syncs with the current lyric line.
 
-A solid pixel skull: the cranium is filled, so an open mouth reads as a dark
-gap. The head is fixed and the mandible is a separate piece that drops 0-2
-rows. Blocks need a UTF-8 terminal -- :func:`supports_unicode` is checked by
-the renderer, which simply skips the skull when the output encoding cannot
-carry it.
+Rendered with half blocks: each text row covers two sub-rows, so the curves are
+smooth instead of stair-stepped, and the rim is drawn brighter than the fill
+(``\u2588`` outline, ``\u2593`` interior) so the skull has depth. The head is
+fixed and the mandible is a separate piece that drops 0-2 rows.
+
+Blocks need a UTF-8 terminal -- :func:`supports_unicode` is checked once by the
+renderer, which skips the skull entirely rather than print mojibake.
 
 Motion comes from :class:`JawAnimator`: a beat envelope plus a continuous
 about-7 Hz "speaking" oscillation. A level threshold alone pins the jaw open on
@@ -21,53 +23,53 @@ from cmd_audio.utils import clamp
 
 # Head rows are fixed; the rows below are the mandible.
 _BIG_HEAD: Sequence[str] = (
-    "      ██████████████████████████████",
-    "     ████████████████████████████████",
-    "   ████████████████████████████████████",
-    "  ██████████████████████████████████████",
-    "  ██████████████████████████████████████",
-    " ████████        ████████        ████████",
-    " ███████          ██████          ███████",
-    " ███████          ██████          ███████",
-    " ███████          ██████          ███████",
-    " ████████        ████████        ████████",
-    "  ██████████████████████████████████████",
-    "   ████████████████████████████████████",
-    "    ████████████████  ████████████████",
-    "      █ █ █ █ █ █ █   █ █ █ █ █ █ █ █",
+    "    ▄██████████████████████████▄",
+    "   ▄█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▄",
+    "  ▄█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▄",
+    "  █▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█",
+    " █▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓█",
+    " █▓▓▓▓▓█▀    ▀█▓▓▓▓▓▓█▀    ▀█▓▓▓▓▓█",
+    " █▓▓▓▓▓█       █▓▓▓▓█       █▓▓▓▓▓█",
+    " █▓▓▓▓█         █▓▓█         █▓▓▓▓█",
+    " █▓▓▓▓█▄        █▓▓█        ▄█▓▓▓▓█",
+    " ▀█▓▓▓▓█       █▓▓▓▓█       █▓▓▓▓█▀",
+    "  █▓▓▓▓▓█▄▄  ▄█▓▓▓▓▓▓█▄  ▄▄█▓▓▓▓▓█",
+    "   █▓▓▓▓▓▓▓██▓▓▓█▀▀█▓▓▓██▓▓▓▓▓▓▓█",
+    "    █▓▓▓▓▓▓▓▓▓▓▓█  █▓▓▓▓▓▓▓▓▓▓▓█",
+    "     ▀█▓▓▓▓▓▓▓▓▓█  █▓▓▓▓▓▓▓▓▓█▀",
+    "      ▀██▓█▓▓█▓█▄▄▄▄█▓█▓▓█▓██▀",
+    "         █ ██ ██ ██ ██ ██ █",
 )
 
 _BIG_JAW: Sequence[str] = (
-    "        █ █ █ █ █ █     █ █ █ █ █ █",
-    "         ████████████████████████",
-    "          ██████████████████████",
-    "           ████████████████████",
-    "            ██████████████████",
-    "             ████████████████",
-    "",
+    "        ▀█ ██ ██ ██ ██ ██ █▀",
+    "          █▓▓█▓▓█▓▓█▓▓█▓▓█",
+    "           █▓▓▓▓▓▓▓▓▓▓▓▓█",
+    "            █▓▓▓▓▓▓▓▓▓▓█",
+    "             ██████████",
     "",
 )
 
 _SMALL_HEAD: Sequence[str] = (
-    "   ██████████████████",
-    "  ████████████████████",
-    " ██████████████████████",
-    " ████     ████     ████",
-    "█████      ██      █████",
-    " ████     ████     ████",
-    " ██████████████████████",
-    "  █ █ █ █ █   █ █ █ █",
+    "  ▄████████████████▄",
+    " ▄█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▄",
+    " █▓▓▓███▓▓▓▓▓▓███▓▓▓█",
+    " █▓▓█   ▀█▓▓█▀   █▓▓█",
+    " █▓▓█    ▀██▀    █▓▓█",
+    " █▓▓█    █▓▓█    █▓▓█",
+    " ▀█▓▓█▄▄█▓▓▓▓█▄▄█▓▓█▀",
+    "  ▀█▓▓▓▓▓█▀▀█▓▓▓▓▓█▀",
+    "    ▀██▀██ ▄█▀██▀▀",
 )
 
 _SMALL_JAW: Sequence[str] = (
-    "    █ █ █ █   █ █ █",
-    "      ████████████",
-    "       ██████████",
-    "        ████████",
-    "",
+    "     ▀█ ██ ██ ██",
+    "       █▓▓█▓▓██",
+    "        ██████",
 )
 
-BLOCK = "\u2588"
+EDGE = "\u2588"
+FILL = "\u2593"
 
 
 def supports_unicode(stream=None) -> bool:
@@ -107,12 +109,7 @@ SMALL_HEIGHT = len(_SMALL_FRAMES[0])
 
 
 class JawAnimator:
-    """Continuous jaw opening from level, beats and line changes.
-
-    ``fresh`` fires when a new lyric line starts (full open), ``beat`` adds a
-    decaying envelope, and a running oscillator supplies the constant motion
-    between beats so a steady loud track still looks like talking.
-    """
+    """Continuous jaw opening from level, beats and line changes."""
 
     def __init__(self, rate: float = 7.0, decay: float = 6.0) -> None:
         self.rate = rate
@@ -162,6 +159,31 @@ def skull_rows(jaw: int, small: bool = False) -> List[str]:
     return list(frames[max(0, min(2, jaw))])
 
 
+def _paint(row: str, edge: str, fill: str, reset: str) -> str:
+    """Colour the rim brighter than the fill, run by run."""
+    out: List[str] = []
+    mode = None
+    for ch in row:
+        if ch == EDGE or ch in "\u2580\u2584":
+            want = "edge"
+        elif ch == FILL:
+            want = "fill"
+        else:
+            want = None
+        if want != mode:
+            if mode is not None and reset:
+                out.append(reset)
+            if want == "edge" and edge:
+                out.append(edge)
+            elif want == "fill" and fill:
+                out.append(fill)
+            mode = want
+        out.append(ch)
+    if mode is not None and reset:
+        out.append(reset)
+    return "".join(out)
+
+
 def render_block(
     width: int,
     jaw: int,
@@ -193,7 +215,7 @@ def render_block(
     body: List[str] = []
     for row in art:
         centred = row.ljust(art_w).center(width)
-        body.append(accent + centred + reset if accent else centred)
+        body.append(_paint(centred, accent, dim, reset) if (accent or dim) else centred)
 
     body.append(" " * width)
 
